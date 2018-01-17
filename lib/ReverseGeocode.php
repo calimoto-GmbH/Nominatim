@@ -80,21 +80,17 @@ class ReverseGeocode
         // Find the nearest point
         $fSearchDiam = 0.0004;
         $iPlaceID = null;
-        $fMaxAreaDistance = 1;
+        $fMaxAreaDistance = 0.1;  // calimoto adaptian, standard 1
         $bIsInUnitedStates = false;
         $bPlaceIsTiger = false;
         $bPlaceIsLine = false;
-        while (!$iPlaceID && $fSearchDiam < $fMaxAreaDistance) {
+        while (!$iPlaceID && $fSearchDiam <= $fMaxAreaDistance) {
             $fSearchDiam = $fSearchDiam * 2;
 
             // If we have to expand the search area by a large amount then we need a larger feature
             // then there is a limit to how small the feature should be
-            if ($fSearchDiam > 2 && $iMaxRank > 4) $iMaxRank = 4;
-            if ($fSearchDiam > 1 && $iMaxRank > 9) $iMaxRank = 8;
-            if ($fSearchDiam > 0.8 && $iMaxRank > 10) $iMaxRank = 10;
-            if ($fSearchDiam > 0.6 && $iMaxRank > 12) $iMaxRank = 12;
-            if ($fSearchDiam > 0.2 && $iMaxRank > 17) $iMaxRank = 17;
-            if ($fSearchDiam > 0.1 && $iMaxRank > 18) $iMaxRank = 18;
+			// calimoto enhancement ==> max rank 16 = cities, previously 18
+            if ($fSearchDiam > 0.1 && $iMaxRank > 16) $iMaxRank = 16;
             if ($fSearchDiam > 0.008 && $iMaxRank > 22) $iMaxRank = 22;
             if ($fSearchDiam > 0.001 && $iMaxRank > 26) {
                 // try with interpolations before continuing
