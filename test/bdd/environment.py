@@ -4,6 +4,7 @@ import os
 import psycopg2
 import psycopg2.extras
 import subprocess
+import tempfile
 from nose.tools import * # for assert functions
 from sys import version_info as python_version
 
@@ -16,7 +17,8 @@ userconfig = {
     'TEMPLATE_DB' : 'test_template_nominatim',
     'TEST_DB' : 'test_nominatim',
     'API_TEST_DB' : 'test_api_nominatim',
-    'TEST_SETTINGS_FILE' : '/tmp/nominatim_settings.php'
+    'TEST_SETTINGS_FILE' : '/tmp/nominatim_settings.php',
+    'PHPCOV' : False, # set to output directory to enable code coverage
 }
 
 use_step_matcher("re")
@@ -27,15 +29,24 @@ class NominatimEnvironment(object):
 
     def __init__(self, config):
         self.build_dir = os.path.abspath(config['BUILDDIR'])
+        self.src_dir = os.path.abspath(os.path.join(os.path.split(__file__)[0], "../.."))
         self.template_db = config['TEMPLATE_DB']
         self.test_db = config['TEST_DB']
         self.api_test_db = config['API_TEST_DB']
         self.local_settings_file = config['TEST_SETTINGS_FILE']
         self.reuse_template = not config['REMOVE_TEMPLATE']
         self.keep_scenario_db = config['KEEP_TEST_DB']
+        self.code_coverage_path = config['PHPCOV']
+        self.code_coverage_id = 1
         os.environ['NOMINATIM_SETTINGS'] = self.local_settings_file
 
         self.template_db_done = False
+
+    def next_code_coverage_file(self):
+        fn = os.path.join(self.code_coverage_path, "%06d.cov" % self.code_coverage_id)
+        self.code_coverage_id += 1
+
+        return fn
 
     def write_nominatim_config(self, dbname):
         f = open(self.local_settings_file, 'w')
@@ -88,17 +99,20 @@ class NominatimEnvironment(object):
         conn.commit()
         conn.close()
 
-        # execute osm2pgsql on an empty file to get the right tables
-        osm2pgsql = os.path.join(self.build_dir, 'osm2pgsql', 'osm2pgsql')
-        proc = subprocess.Popen([osm2pgsql, '-lsc', '-r', 'xml',
-                                 '-O', 'gazetteer', '-d', self.template_db, '-'],
-                                cwd=self.build_dir, stdin=subprocess.PIPE,
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        [outstr, errstr] = proc.communicate(input=b'<osm version="0.6"></osm>')
-        logger.debug("running osm2pgsql for template: %s\n%s\n%s" % (osm2pgsql, outstr, errstr))
-        self.run_setup_script('create-functions', 'create-tables',
-                              'create-partition-tables', 'create-partition-functions',
-                              'load-data', 'create-search-indices')
+        # execute osm2pgsql import on an empty file to get the right tables
+        with tempfile.NamedTemporaryFile(dir='/tmp', suffix='.xml') as fd:
+            fd.write(b'<osm version="0.6"></osm>')
+            fd.flush()
+            self.run_setup_script('import-data',
+                                  'ignore-errors',
+                                  'create-functions',
+                                  'create-tables',
+                                  'create-partition-tables',
+                                  'create-partition-functions',
+                                  'load-data',
+                                  'create-search-indices',
+                                  osm_file=fd.name,
+                                  osm2pgsql_cache='200')
 
     def setup_api_db(self, context):
         self.write_nominatim_config(self.api_test_db)

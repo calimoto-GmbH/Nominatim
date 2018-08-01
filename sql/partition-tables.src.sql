@@ -7,8 +7,8 @@ drop type if exists nearfeature cascade;
 create type nearfeature as (
   place_id BIGINT,
   keywords int[],
-  rank_address integer,
-  rank_search integer,
+  rank_address smallint,
+  rank_search smallint,
   distance float,
   isguess boolean
 );
@@ -17,21 +17,22 @@ drop type if exists nearfeaturecentr cascade;
 create type nearfeaturecentr as (
   place_id BIGINT,
   keywords int[],
-  rank_address integer,
-  rank_search integer,
+  rank_address smallint,
+  rank_search smallint,
   distance float,
   isguess boolean,
+  postcode TEXT,
   centroid GEOMETRY
 );
 
 drop table IF EXISTS search_name_blank CASCADE;
 CREATE TABLE search_name_blank (
   place_id BIGINT,
-  search_rank integer,
-  address_rank integer,
-  name_vector integer[]
+  search_rank smallint,
+  address_rank smallint,
+  name_vector integer[],
+  centroid GEOMETRY(Geometry, 4326)
   );
-SELECT AddGeometryColumn('search_name_blank', 'centroid', 4326, 'GEOMETRY', 2);
 
 
 CREATE TABLE location_area_country () INHERITS (location_area_large) {ts:address-data};
@@ -52,11 +53,11 @@ CREATE INDEX idx_search_name_-partition-_centroid ON search_name_-partition- USI
 CREATE INDEX idx_search_name_-partition-_name_vector ON search_name_-partition- USING GIN (name_vector) WITH (fastupdate = off) {ts:address-index};
 
 CREATE TABLE location_road_-partition- (
-  partition integer,
   place_id BIGINT,
-  country_code VARCHAR(2)
+  partition SMALLINT,
+  country_code VARCHAR(2),
+  geometry GEOMETRY(Geometry, 4326)
   ) {ts:address-data};
-SELECT AddGeometryColumn('location_road_-partition-', 'geometry', 4326, 'GEOMETRY', 2);
 CREATE INDEX idx_location_road_-partition-_geometry ON location_road_-partition- USING GIST (geometry) {ts:address-index};
 CREATE INDEX idx_location_road_-partition-_place_id ON location_road_-partition- USING BTREE (place_id) {ts:address-index};
 

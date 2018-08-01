@@ -1,12 +1,15 @@
 drop table if exists import_status;
 CREATE TABLE import_status (
-  lastimportdate timestamp NOT NULL
+  lastimportdate timestamp NOT NULL,
+  sequence_id integer,
+  indexed boolean
   );
 GRANT SELECT ON import_status TO "{www-user}" ;
 
 drop table if exists import_osmosis_log;
 CREATE TABLE import_osmosis_log (
   batchend timestamp,
+  batchseq integer,
   batchsize integer,
   starttime timestamp,
   endtime timestamp,
@@ -52,28 +55,29 @@ CREATE SEQUENCE seq_word start 1;
 
 drop table IF EXISTS location_area CASCADE;
 CREATE TABLE location_area (
-  partition integer,
   place_id BIGINT,
-  country_code VARCHAR(2),
   keywords INTEGER[],
-  rank_search INTEGER NOT NULL,
-  rank_address INTEGER NOT NULL,
-  isguess BOOL
+  partition SMALLINT,
+  rank_search SMALLINT NOT NULL,
+  rank_address SMALLINT NOT NULL,
+  country_code VARCHAR(2),
+  isguess BOOL,
+  postcode TEXT,
+  centroid GEOMETRY(Point, 4326),
+  geometry GEOMETRY(Geometry, 4326)
   );
-SELECT AddGeometryColumn('location_area', 'centroid', 4326, 'POINT', 2);
-SELECT AddGeometryColumn('location_area', 'geometry', 4326, 'GEOMETRY', 2);
 
 CREATE TABLE location_area_large () INHERITS (location_area);
 
 drop table IF EXISTS location_property CASCADE;
 CREATE TABLE location_property (
   place_id BIGINT,
-  partition integer,
   parent_place_id BIGINT,
+  partition SMALLINT,
   housenumber TEXT,
-  postcode TEXT
+  postcode TEXT,
+  centroid GEOMETRY(Point, 4326)
   );
-SELECT AddGeometryColumn('location_property', 'centroid', 4326, 'POINT', 2);
 
 CREATE TABLE location_property_aux () INHERITS (location_property);
 CREATE INDEX idx_location_property_aux_place_id ON location_property_aux USING BTREE (place_id);
@@ -81,26 +85,34 @@ CREATE INDEX idx_location_property_aux_parent_place_id ON location_property_aux 
 CREATE INDEX idx_location_property_aux_housenumber_parent_place_id ON location_property_aux USING BTREE (parent_place_id, housenumber);
 GRANT SELECT ON location_property_aux TO "{www-user}";
 
-CREATE TABLE location_property_tiger (linegeo GEOMETRY, place_id BIGINT, partition INTEGER, parent_place_id BIGINT, startnumber INTEGER, endnumber INTEGER, interpolationtype TEXT, postcode TEXT);
+CREATE TABLE location_property_tiger (
+  place_id BIGINT,
+  parent_place_id BIGINT,
+  startnumber INTEGER,
+  endnumber INTEGER,
+  partition SMALLINT,
+  linegeo GEOMETRY,
+  interpolationtype TEXT,
+  postcode TEXT);
 GRANT SELECT ON location_property_tiger TO "{www-user}";
 
 drop table if exists location_property_osmline;
 CREATE TABLE location_property_osmline (
-    linegeo GEOMETRY,
     place_id BIGINT NOT NULL,
-    partition INTEGER,
     osm_id BIGINT,
     parent_place_id BIGINT,
+    geometry_sector INTEGER,
+    indexed_date TIMESTAMP,
     startnumber INTEGER,
     endnumber INTEGER,
+    partition SMALLINT,
+    indexed_status SMALLINT,
+    linegeo GEOMETRY,
     interpolationtype TEXT,
-    street TEXT,
-    addr_place TEXT,
+    address HSTORE,
     postcode TEXT,
-    calculated_country_code VARCHAR(2),
-    geometry_sector INTEGER,
-    indexed_status INTEGER,
-    indexed_date TIMESTAMP){ts:search-data};
+    country_code VARCHAR(2)
+  ){ts:search-data};
 CREATE UNIQUE INDEX idx_osmline_place_id ON location_property_osmline USING BTREE (place_id) {ts:search-index};
 CREATE INDEX idx_osmline_geometry_sector ON location_property_osmline USING BTREE (geometry_sector) {ts:address-index};
 CREATE INDEX idx_osmline_linegeo ON location_property_osmline USING GIST (linegeo) {ts:search-index};
@@ -109,47 +121,49 @@ GRANT SELECT ON location_property_osmline TO "{www-user}";
 drop table IF EXISTS search_name;
 CREATE TABLE search_name (
   place_id BIGINT,
-  search_rank integer,
-  address_rank integer,
   importance FLOAT,
-  country_code varchar(2),
+  search_rank SMALLINT,
+  address_rank SMALLINT,
   name_vector integer[],
-  nameaddress_vector integer[]
+  nameaddress_vector integer[],
+  country_code varchar(2),
+  centroid GEOMETRY(Geometry, 4326)
   ) {ts:search-data};
-SELECT AddGeometryColumn('search_name', 'centroid', 4326, 'GEOMETRY', 2);
 CREATE INDEX idx_search_name_place_id ON search_name USING BTREE (place_id) {ts:search-index};
 
 drop table IF EXISTS place_addressline;
 CREATE TABLE place_addressline (
   place_id BIGINT,
   address_place_id BIGINT,
+  distance FLOAT,
+  cached_rank_address SMALLINT,
   fromarea boolean,
-  isaddress boolean,
-  distance float,
-  cached_rank_address integer
+  isaddress boolean
   ) {ts:search-data};
 CREATE INDEX idx_place_addressline_place_id on place_addressline USING BTREE (place_id) {ts:search-index};
 
 drop table if exists placex;
 CREATE TABLE placex (
   place_id BIGINT NOT NULL,
-  partition integer,
-  LIKE place INCLUDING CONSTRAINTS,
   parent_place_id BIGINT,
   linked_place_id BIGINT,
-  rank_address INTEGER,
-  rank_search INTEGER,
   importance FLOAT,
-  indexed_status INTEGER,
   indexed_date TIMESTAMP,
-  wikipedia TEXT, -- calculated wikipedia article name (language:title)
   geometry_sector INTEGER,
-  calculated_country_code varchar(2)
+  rank_address SMALLINT,
+  rank_search SMALLINT,
+  partition SMALLINT,
+  indexed_status SMALLINT,
+  LIKE place INCLUDING CONSTRAINTS,
+  wikipedia TEXT, -- calculated wikipedia article name (language:title)
+  country_code varchar(2),
+  housenumber TEXT,
+  postcode TEXT,
+  centroid GEOMETRY(Geometry, 4326)
   ) {ts:search-data};
-SELECT AddGeometryColumn('placex', 'centroid', 4326, 'GEOMETRY', 2);
 CREATE UNIQUE INDEX idx_place_id ON placex USING BTREE (place_id) {ts:search-index};
 CREATE INDEX idx_placex_osmid ON placex USING BTREE (osm_type, osm_id) {ts:search-index};
-CREATE INDEX idx_placex_linked_place_id ON placex USING BTREE (linked_place_id) {ts:address-index};
+CREATE INDEX idx_placex_linked_place_id ON placex USING BTREE (linked_place_id) {ts:address-index} WHERE linked_place_id IS NOT NULL;
 CREATE INDEX idx_placex_rank_search ON placex USING BTREE (rank_search, geometry_sector) {ts:address-index};
 CREATE INDEX idx_placex_geometry ON placex USING GIST (geometry) {ts:search-index};
 CREATE INDEX idx_placex_adminname on placex USING BTREE (make_standard_name(name->'name'),rank_search) {ts:address-index} WHERE osm_type='N' and rank_search < 26;
@@ -184,29 +198,45 @@ CREATE TRIGGER place_before_delete BEFORE DELETE ON place
 CREATE TRIGGER place_before_insert BEFORE INSERT ON place
     FOR EACH ROW EXECUTE PROCEDURE place_insert();
 
-DROP SEQUENCE IF EXISTS seq_postcodes;
-CREATE SEQUENCE seq_postcodes start 1;
+-- Table for synthetic postcodes.
+DROP TABLE IF EXISTS location_postcode;
+CREATE TABLE location_postcode (
+  place_id BIGINT,
+  parent_place_id BIGINT,
+  rank_search SMALLINT,
+  rank_address SMALLINT,
+  indexed_status SMALLINT,
+  indexed_date TIMESTAMP,
+  country_code varchar(2),
+  postcode TEXT,
+  geometry GEOMETRY(Geometry, 4326)
+  );
+CREATE INDEX idx_postcode_geometry ON location_postcode USING GIST (geometry) {ts:address-index};
+GRANT SELECT ON location_postcode TO "{www-user}" ;
+
+CREATE TRIGGER location_postcode_before_update BEFORE UPDATE ON location_postcode
+    FOR EACH ROW EXECUTE PROCEDURE postcode_update();
 
 DROP TABLE IF EXISTS import_polygon_error;
 CREATE TABLE import_polygon_error (
-  osm_type char(1),
-  osm_id INTEGER,
+  osm_id BIGINT,
+  osm_type CHAR(1),
   class TEXT NOT NULL,
   type TEXT NOT NULL,
   name HSTORE,
   country_code varchar(2),
   updated timestamp,
-  errormessage text
+  errormessage text,
+  prevgeometry GEOMETRY(Geometry, 4326),
+  newgeometry GEOMETRY(Geometry, 4326)
   );
-SELECT AddGeometryColumn('import_polygon_error', 'prevgeometry', 4326, 'GEOMETRY', 2);
-SELECT AddGeometryColumn('import_polygon_error', 'newgeometry', 4326, 'GEOMETRY', 2);
 CREATE INDEX idx_import_polygon_error_osmid ON import_polygon_error USING BTREE (osm_type, osm_id);
 GRANT SELECT ON import_polygon_error TO "{www-user}";
 
 DROP TABLE IF EXISTS import_polygon_delete;
 CREATE TABLE import_polygon_delete (
-  osm_type char(1),
-  osm_id INTEGER,
+  osm_id BIGINT,
+  osm_type CHAR(1),
   class TEXT NOT NULL,
   type TEXT NOT NULL
   );

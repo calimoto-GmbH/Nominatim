@@ -8,7 +8,7 @@ ini_set('display_errors', 'stderr');
 
 $aCMDOptions
 = array(
-   "Import and export special phrases",
+   'Import and export special phrases',
    array('help', 'h', 0, 1, 0, 0, false, 'Show Help'),
    array('quiet', 'q', 0, 1, 0, 0, 'bool', 'Quiet output'),
    array('verbose', 'v', 0, 1, 0, 0, 'bool', 'Verbose output'),
@@ -19,6 +19,7 @@ getCmdOpt($_SERVER['argv'], $aCMDOptions, $aCMDResult, true, true);
 include(CONST_InstallPath.'/settings/phrase_settings.php');
 
 if ($aCMDResult['wiki-import']) {
+    $oNormalizer = Transliterator::createFromRules(CONST_Term_Normalization_Rules);
     $aPairs = array();
 
     $sLanguageIn = CONST_Languages ? CONST_Languages :
@@ -26,11 +27,16 @@ if ($aCMDResult['wiki-import']) {
          'ia,is,it,ja,mk,nl,no,pl,ps,pt,ru,sk,sl,sv,uk,vi');
 
     foreach (explode(',', $sLanguageIn) as $sLanguage) {
-        $sURL = 'http://wiki.openstreetmap.org/wiki/Special:Export/Nominatim/Special_Phrases/'.strtoupper($sLanguage);
+        $sURL = 'https://wiki.openstreetmap.org/wiki/Special:Export/Nominatim/Special_Phrases/'.strtoupper($sLanguage);
         $sWikiPageXML = file_get_contents($sURL);
         if (preg_match_all('#\\| ([^|]+) \\|\\| ([^|]+) \\|\\| ([^|]+) \\|\\| ([^|]+) \\|\\| ([\\-YN])#', $sWikiPageXML, $aMatches, PREG_SET_ORDER)) {
             foreach ($aMatches as $aMatch) {
                 $sLabel = trim($aMatch[1]);
+                if ($oNormalizer !== null) {
+                    $sTrans = pg_escape_string($oNormalizer->transliterate($sLabel));
+                } else {
+                    $sTrans = null;
+                }
                 $sClass = trim($aMatch[2]);
                 $sType = trim($aMatch[3]);
                 // hack around a bug where building=yes was imported with
@@ -57,43 +63,43 @@ if ($aCMDResult['wiki-import']) {
 
                 switch (trim($aMatch[4])) {
                     case 'near':
-                        echo "select getorcreate_amenityoperator(make_standard_name('".pg_escape_string($sLabel)."'), '$sClass', '$sType', 'near');\n";
+                        echo "select getorcreate_amenityoperator(make_standard_name('".pg_escape_string($sLabel)."'), '$sTrans', '$sClass', '$sType', 'near');\n";
                         break;
                     case 'in':
-                        echo "select getorcreate_amenityoperator(make_standard_name('".pg_escape_string($sLabel)."'), '$sClass', '$sType', 'in');\n";
+                        echo "select getorcreate_amenityoperator(make_standard_name('".pg_escape_string($sLabel)."'), '$sTrans', '$sClass', '$sType', 'in');\n";
                         break;
                     default:
-                        echo "select getorcreate_amenity(make_standard_name('".pg_escape_string($sLabel)."'), '$sClass', '$sType');\n";
+                        echo "select getorcreate_amenity(make_standard_name('".pg_escape_string($sLabel)."'), '$sTrans', '$sClass', '$sType');\n";
                         break;
                 }
             }
         }
     }
 
-    echo "create index idx_placex_classtype on placex (class, type);";
+    echo 'create index idx_placex_classtype on placex (class, type);';
 
     foreach ($aPairs as $aPair) {
-        echo "create table place_classtype_".pg_escape_string($aPair[0])."_".pg_escape_string($aPair[1]);
+        echo 'create table place_classtype_'.pg_escape_string($aPair[0]).'_'.pg_escape_string($aPair[1]);
         if (CONST_Tablespace_Aux_Data)
-            echo " tablespace ".CONST_Tablespace_Aux_Data;
-        echo " as select place_id as place_id,st_centroid(geometry) as centroid from placex where ";
+            echo ' tablespace '.CONST_Tablespace_Aux_Data;
+        echo ' as select place_id as place_id,st_centroid(geometry) as centroid from placex where ';
         echo "class = '".pg_escape_string($aPair[0])."' and type = '".pg_escape_string($aPair[1])."'";
         echo ";\n";
 
-        echo "CREATE INDEX idx_place_classtype_".pg_escape_string($aPair[0])."_".pg_escape_string($aPair[1])."_centroid ";
-        echo "ON place_classtype_".pg_escape_string($aPair[0])."_".pg_escape_string($aPair[1])." USING GIST (centroid)";
+        echo 'CREATE INDEX idx_place_classtype_'.pg_escape_string($aPair[0]).'_'.pg_escape_string($aPair[1]).'_centroid ';
+        echo 'ON place_classtype_'.pg_escape_string($aPair[0]).'_'.pg_escape_string($aPair[1]).' USING GIST (centroid)';
         if (CONST_Tablespace_Aux_Index)
-            echo " tablespace ".CONST_Tablespace_Aux_Index;
+            echo ' tablespace '.CONST_Tablespace_Aux_Index;
         echo ";\n";
 
-        echo "CREATE INDEX idx_place_classtype_".pg_escape_string($aPair[0])."_".pg_escape_string($aPair[1])."_place_id ";
-        echo "ON place_classtype_".pg_escape_string($aPair[0])."_".pg_escape_string($aPair[1])." USING btree(place_id)";
+        echo 'CREATE INDEX idx_place_classtype_'.pg_escape_string($aPair[0]).'_'.pg_escape_string($aPair[1]).'_place_id ';
+        echo 'ON place_classtype_'.pg_escape_string($aPair[0]).'_'.pg_escape_string($aPair[1]).' USING btree(place_id)';
         if (CONST_Tablespace_Aux_Index)
-            echo " tablespace ".CONST_Tablespace_Aux_Index;
+            echo ' tablespace '.CONST_Tablespace_Aux_Index;
         echo ";\n";
 
-        echo "GRANT SELECT ON place_classtype_".pg_escape_string($aPair[0])."_".pg_escape_string($aPair[1]).' TO "'.CONST_Database_Web_User."\";\n";
+        echo 'GRANT SELECT ON place_classtype_'.pg_escape_string($aPair[0]).'_'.pg_escape_string($aPair[1]).' TO "'.CONST_Database_Web_User."\";\n";
     }
 
-    echo "drop index idx_placex_classtype;";
+    echo 'drop index idx_placex_classtype;';
 }

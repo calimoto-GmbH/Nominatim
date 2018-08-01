@@ -102,12 +102,12 @@ Feature: Simple Tests
     Scenario: Empty XML search with viewbox
         When sending xml search query "xnznxvcx"
           | viewbox |
-          | 12,45.13,77,33 |
+          | 12,33,77,45.13 |
         Then result header contains
           | attr        | value |
           | querystring | xnznxvcx |
           | polygon     | false |
-          | viewbox     | 12,45.13,77,33 |
+          | viewbox     | 12,33,77,45.13 |
 
     Scenario: Empty XML search with viewboxlbrt
         When sending xml search query "xnznxvcx"
@@ -117,17 +117,17 @@ Feature: Simple Tests
           | attr        | value |
           | querystring | xnznxvcx |
           | polygon     | false |
-          | viewbox     | 12,45,77,34.13 |
+          | viewbox     | 12,34.13,77,45 |
 
     Scenario: Empty XML search with viewboxlbrt and viewbox
         When sending xml search query "pub"
           | viewbox        | viewboxblrt |
-          | 12,45.13,77,33 | 1,2,3,4 |
+          | 12,33,77,45.13 | 1,2,3,4 |
         Then result header contains
           | attr        | value |
           | querystring | pub |
           | polygon     | false |
-          | viewbox     | 12,45.13,77,33 |
+          | viewbox     | 12,33,77,45.13 |
 
     Scenario Outline: Empty XML search with polygon values
         When sending xml search query "xnznxvcx"

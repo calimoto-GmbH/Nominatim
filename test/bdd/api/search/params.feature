@@ -19,6 +19,12 @@ Feature: Search queries
         And result 0 has not attributes address
         And result 0 has bounding box in 46.5,47.5,9,10
 
+    Scenario: Unknown formats returns a user error
+        When sending search query "Vaduz"
+          | format |
+          | x45    |
+        Then a HTTP 400 is returned
+
     Scenario: JSON search with addressdetails
         When sending json search query "Montevideo" with address
         Then address of result 0 is
@@ -66,15 +72,21 @@ Feature: Search queries
         Then there are duplicates
 
     Scenario: Search with bounded viewbox in right area
-        When sending json search query "restaurant" with address
+        When sending json search query "bar" with address
           | bounded | viewbox |
           | 1       | -56.16786,-34.84061,-56.12525,-34.86526 |
         Then result addresses contain
           | city |
           | Montevideo |
 
+    Scenario: Country search with bounded viewbox remain in the area
+        When sending json search query "" with address
+          | bounded | viewbox                                 | country |
+          | 1       | -56.16786,-34.84061,-56.12525,-34.86526 | de |
+        Then less than 1 result is returned
+
     Scenario: Search with bounded viewboxlbrt in right area
-        When sending json search query "restaurant" with address
+        When sending json search query "bar" with address
           | bounded | viewboxlbrt |
           | 1       | -56.16786,-34.86526,-56.12525,-34.84061 |
         Then result addresses contain
@@ -90,7 +102,7 @@ Feature: Search queries
           | ^[^,]*[Rr]estaurant.* |
 
     Scenario: bounded search remains within viewbox, even with no results
-         When sending json search query "restaurant"
+         When sending json search query "[restaurant]"
            | bounded | viewbox |
            | 1       | 43.5403125,-5.6563282,43.54285,-5.662003 |
         Then less than 1 result is returned
@@ -115,6 +127,38 @@ Feature: Search queries
           | ID | state |
           | 0  | Florida |
 
+    Scenario: viewboxes cannot be points
+        When sending json search query "foo"
+          | viewbox |
+          | 1.01,34.6,1.01,34.6 |
+        Then a HTTP 400 is returned
+
+    Scenario Outline: viewbox must have four coordinate numbers
+        When sending json search query "foo"
+          | viewbox |
+          | <viewbox> |
+        Then a HTTP 400 is returned
+
+    Examples:
+        | viewbox |
+        | 34      |
+        | 0.003,-84.4 |
+        | 5.2,4.5542,12.4 |
+        | 23.1,-6,0.11,44.2,9.1 |
+
+    Scenario Outline: viewboxlbrt must have four coordinate numbers
+        When sending json search query "foo"
+          | viewboxlbrt |
+          | <viewbox> |
+        Then a HTTP 400 is returned
+
+    Examples:
+        | viewbox |
+        | 34      |
+        | 0.003,-84.4 |
+        | 5.2,4.5542,12.4 |
+        | 23.1,-6,0.11,44.2,9.1 |
+
     Scenario: Overly large limit number for search results
         When sending json search query "restaurant"
           | limit |
@@ -126,6 +170,12 @@ Feature: Search queries
           | limit |
           | 4 |
         Then exactly 4 results are returned
+
+    Scenario: Limit parameter must be a number
+        When sending search query "Blue Laguna"
+          | limit |
+          | );    |
+        Then a HTTP 400 is returned
 
     Scenario: Restrict to feature type country
         When sending xml search query "Uruguay"
@@ -298,3 +348,11 @@ Feature: Search queries
         | xml      | geojson |
         | json     | geojson |
         | jsonv2   | geojson |
+
+    Scenario: Search along a route
+        When sending json search query "restaurant" with address
+          | bounded | routewidth | route                                   |
+          | 1       | 0.1        | -103.23255,44.08198,-103.22516,44.08079 |
+        Then result addresses contain
+          | city |
+          | Rapid City |

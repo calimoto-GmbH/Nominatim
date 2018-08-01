@@ -10,8 +10,8 @@
 
   <rule ref="Generic.Files.LineLength">
     <properties>
-     <property name="lineLimit" value="199"/>
-     <property name="absoluteLineLimit" value="199"/>
+     <property name="lineLimit" value="194"/>
+     <property name="absoluteLineLimit" value="194"/>
     </properties>
   </rule>
 
@@ -125,6 +125,23 @@
   <rule ref="Squiz.Arrays.ArrayDeclaration.SingleLineNotAllowed">
     <severity>0</severity>
   </rule>
+
+
+
+
+
+  <!-- **************************************************************
+       STRING QUOTING
+       ************************************************************** -->
+
+  <!-- Prefer single quoted strings -->
+  <rule ref="Squiz.Strings.DoubleQuoteUsage" />
+
+  <!-- We allow variabled inside double-quoted strings "abc $somevar" -->
+  <rule ref="Squiz.Strings.DoubleQuoteUsage.ContainsVar">
+    <severity>0</severity>
+  </rule>
+
 
 
 

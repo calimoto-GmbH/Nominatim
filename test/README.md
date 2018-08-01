@@ -24,6 +24,7 @@ tests for specific PHP functions.
 
 This test directory is sturctured as follows:
 
+```
  -+-   bdd         Functional API tests
   | \
   | +-  steps      Step implementations for test descriptions
@@ -34,7 +35,7 @@ This test directory is sturctured as follows:
   +-   php         PHP unit tests
   +-   scenes      Geometry test data
   +-   testdb      Base data for generating API test database
-
+```
 
 PHP Unit Tests
 ==============
@@ -44,8 +45,8 @@ Very low coverage.
 
 To execute the test suite run
 
-   cd test/php
-   phpunit ../
+    cd test/php
+    phpunit ../
 
 It will read phpunit.xml which points to the library, test path, bootstrap
 strip and set other parameters.
@@ -98,7 +99,10 @@ be documented.
 
 These tests are meant to test the different API endpoints and their parameters.
 They require a preimported test database, which consists of the import of a
-planet extract. The polygons defining the extract can be found in the test/testdb
+planet extract. A precompiled PBF with the necessary data can be downloaded from
+https://www.nominatim.org/data/test/nominatim-api-testdata.pbf
+
+The polygons defining the extract can be found in the test/testdb
 directory. There is also a reduced set of wikipedia data for this extract,
 which you need to import as well. For Tiger tests the data of South Dakota
 is required. Get the Tiger files `46*`.
@@ -108,13 +112,30 @@ planets are likely to work as well but you may see isolated test
 failures where the data has changed. To recreate the input data
 for the test database run:
 
-    wget http://free.nchc.org.tw/osm.planet/pbf/planet-160725.osm.pbf
+    wget https://free.nchc.org.tw/osm.planet/pbf/planet-160725.osm.pbf
     osmconvert planet-160725.osm.pbf -B=test/testdb/testdb.polys -o=testdb.pbf
 
 Before importing make sure to add the following to your local settings:
 
     @define('CONST_Database_DSN', 'pgsql://@/test_api_nominatim');
     @define('CONST_Wikipedia_Data_Path', CONST_BasePath.'/test/testdb');
+
+#### Code Coverage
+
+The API tests also support code coverage tests. You need to install
+[PHP_CodeCoverage](https://github.com/sebastianbergmann/php-code-coverage).
+On Debian/Ubuntu run:
+
+    apt-get install php-codecoverage php-xdebug
+
+The run the API tests as follows:
+
+    behave api -DPHPCOV=<coverage output dir>
+
+The output directory must be an absolute path. To generate reports, you can use
+the [phpcov](https://github.com/sebastianbergmann/phpcov) tool:
+
+    phpcov merge --html=<report output dir> <coverage output dir>
 
 ### Indexing Tests (`test/bdd/db`)
 
