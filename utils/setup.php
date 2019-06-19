@@ -7,7 +7,7 @@ ini_set('memory_limit', '800M');
 
 $aCMDOptions
 = array(
-   "Create and setup nominatim search system",
+   'Create and setup nominatim search system',
    array('help', 'h', 0, 1, 0, 0, false, 'Show Help'),
    array('quiet', 'q', 0, 1, 0, 0, 'bool', 'Quiet output'),
    array('verbose', 'v', 0, 1, 0, 0, 'bool', 'Verbose output'),
@@ -28,7 +28,7 @@ $aCMDOptions
    array('create-tables', '', 0, 1, 0, 0, 'bool', 'Create main tables'),
    array('create-partition-tables', '', 0, 1, 0, 0, 'bool', 'Create required partition tables'),
    array('create-partition-functions', '', 0, 1, 0, 0, 'bool', 'Create required partition triggers'),
-   array('no-partitions', '', 0, 1, 0, 0, 'bool', "Do not partition search indices (speeds up import of single country extracts)"),
+   array('no-partitions', '', 0, 1, 0, 0, 'bool', 'Do not partition search indices (speeds up import of single country extracts)'),
    array('import-wikipedia-articles', '', 0, 1, 0, 0, 'bool', 'Import wikipedia article dump'),
    array('load-data', '', 0, 1, 0, 0, 'bool', 'Copy data to live tables from import table'),
    array('disable-token-precalc', '', 0, 1, 0, 0, 'bool', 'Disable name precalculation (EXPERT)'),
@@ -65,11 +65,11 @@ if ($aCMDResult['import-data'] || $aCMDResult['all']) {
 $iInstances = isset($aCMDResult['threads'])?$aCMDResult['threads']:(getProcessorCount()-1);
 if ($iInstances < 1) {
     $iInstances = 1;
-    echo "WARNING: resetting threads to $iInstances\n";
+    warn("resetting threads to $iInstances");
 }
 if ($iInstances > getProcessorCount()) {
     $iInstances = getProcessorCount();
-    echo "WARNING: resetting threads to $iInstances\n";
+    warn("resetting threads to $iInstances");
 }
 
 // Assume we can steal all the cache memory in the box (unless told otherwise)
@@ -83,7 +83,7 @@ $aDSNInfo = DB::parseDSN(CONST_Database_DSN);
 if (!isset($aDSNInfo['port']) || !$aDSNInfo['port']) $aDSNInfo['port'] = 5432;
 
 if ($aCMDResult['create-db'] || $aCMDResult['all']) {
-    echo "Create DB\n";
+    info('Create DB');
     $bDidSomething = true;
     $oDB = DB::connect(CONST_Database_DSN, false);
     if (!PEAR::isError($oDB)) {
@@ -93,18 +93,16 @@ if ($aCMDResult['create-db'] || $aCMDResult['all']) {
 }
 
 if ($aCMDResult['setup-db'] || $aCMDResult['all']) {
-    echo "Setup DB\n";
+    info('Setup DB');
     $bDidSomething = true;
 
-    // TODO: path detection, detection memory, etc.
-    //
     $oDB =& getDB();
 
     $fPostgresVersion = getPostgresVersion($oDB);
     echo 'Postgres version found: '.$fPostgresVersion."\n";
 
     if ($fPostgresVersion < 9.1) {
-        fail("Minimum supported version of Postgresql is 9.1.");
+        fail('Minimum supported version of Postgresql is 9.1.');
     }
 
     pgsqlRunScript('CREATE EXTENSION IF NOT EXISTS hstore');
@@ -117,7 +115,7 @@ if ($aCMDResult['setup-db'] || $aCMDResult['all']) {
 
     if ($iNumFunc == 0) {
         pgsqlRunScript("create function hstore_to_json(dummy hstore) returns text AS 'select null::text' language sql immutable");
-        echo "WARNING: Postgresql is too old. extratags and namedetails API not available.";
+        warn('Postgresql is too old. extratags and namedetails API not available.');
     }
 
     $fPostgisVersion = getPostgisVersion($oDB);
@@ -132,14 +130,40 @@ if ($aCMDResult['setup-db'] || $aCMDResult['all']) {
         pgsqlRunScript('ALTER FUNCTION ST_Distance_Spheroid(geometry, geometry, spheroid) RENAME TO ST_DistanceSpheroid');
     }
 
+    $i = chksql($oDB->getOne("select count(*) from pg_user where usename = '".CONST_Database_Web_User."'"));
+    if ($i == 0) {
+        echo "\nERROR: Web user '".CONST_Database_Web_User."' does not exist. Create it with:\n";
+        echo "\n          createuser ".CONST_Database_Web_User."\n\n";
+        exit(1);
+    }
+
+    // Try accessing the C module, so we know early if something is wrong
+    // and can simply error out.
+    $sSQL = "CREATE FUNCTION nominatim_test_import_func(text) RETURNS text AS '";
+    $sSQL .= CONST_InstallPath."/module/nominatim.so', 'transliteration' LANGUAGE c IMMUTABLE STRICT";
+    $sSQL .= ';DROP FUNCTION nominatim_test_import_func(text);';
+    $oResult = $oDB->query($sSQL);
+
+    if (PEAR::isError($oResult)) {
+        echo "\nERROR: Failed to load nominatim module. Reason:\n";
+        echo $oResult->userinfo."\n\n";
+        exit(1);
+    }
+
+    if (!file_exists(CONST_ExtraDataPath.'/country_osm_grid.sql.gz')) {
+        echo 'Error: you need to download the country_osm_grid first:';
+        echo "\n    wget -O ".CONST_ExtraDataPath."/country_osm_grid.sql.gz https://www.nominatim.org/data/country_grid.sql.gz\n";
+        exit(1);
+    }
+
     pgsqlRunScriptFile(CONST_BasePath.'/data/country_name.sql');
     pgsqlRunScriptFile(CONST_BasePath.'/data/country_naturalearthdata.sql');
-    pgsqlRunScriptFile(CONST_BasePath.'/data/country_osm_grid.sql');
+    pgsqlRunScriptFile(CONST_BasePath.'/data/country_osm_grid.sql.gz');
     pgsqlRunScriptFile(CONST_BasePath.'/data/gb_postcode_table.sql');
     if (file_exists(CONST_BasePath.'/data/gb_postcode_data.sql.gz')) {
         pgsqlRunScriptFile(CONST_BasePath.'/data/gb_postcode_data.sql.gz');
     } else {
-        echo "WARNING: external UK postcode table not found.\n";
+        warn('external UK postcode table not found.');
     }
     if (CONST_Use_Extra_US_Postcodes) {
         pgsqlRunScriptFile(CONST_BasePath.'/data/us_postcode.sql');
@@ -158,7 +182,7 @@ if ($aCMDResult['setup-db'] || $aCMDResult['all']) {
 }
 
 if ($aCMDResult['import-data'] || $aCMDResult['all']) {
-    echo "Import\n";
+    info('Import data');
     $bDidSomething = true;
 
     $osm2pgsql = CONST_Osm2pgsql_Binary;
@@ -186,22 +210,24 @@ if ($aCMDResult['import-data'] || $aCMDResult['all']) {
     passthruCheckReturn($osm2pgsql);
 
     $oDB =& getDB();
-    if (!chksql($oDB->getRow('select * from place limit 1'))) {
+    if (!$aCMDResult['ignore-errors'] && !chksql($oDB->getRow('select * from place limit 1'))) {
         fail('No Data');
     }
 }
 
 if ($aCMDResult['create-functions'] || $aCMDResult['all']) {
-    echo "Functions\n";
+    info('Create Functions');
     $bDidSomething = true;
-    if (!file_exists(CONST_InstallPath.'/module/nominatim.so')) fail("nominatim module not built");
+    if (!file_exists(CONST_InstallPath.'/module/nominatim.so')) {
+        fail('nominatim module not built');
+    }
     create_sql_functions($aCMDResult);
 }
 
 if ($aCMDResult['create-tables'] || $aCMDResult['all']) {
+    info('Create Tables');
     $bDidSomething = true;
 
-    echo "Tables\n";
     $sTemplate = file_get_contents(CONST_BasePath.'/sql/tables.sql');
     $sTemplate = str_replace('{www-user}', CONST_Database_Web_User, $sTemplate);
     $sTemplate = replace_tablespace(
@@ -237,12 +263,12 @@ if ($aCMDResult['create-tables'] || $aCMDResult['all']) {
     pgsqlRunScript($sTemplate, false);
 
     // re-run the functions
-    echo "Functions\n";
+    info('Recreate Functions');
     create_sql_functions($aCMDResult);
 }
 
 if ($aCMDResult['create-partition-tables'] || $aCMDResult['all']) {
-    echo "Partition Tables\n";
+    info('Create Partition Tables');
     $bDidSomething = true;
 
     $sTemplate = file_get_contents(CONST_BasePath.'/sql/partition-tables.src.sql');
@@ -282,7 +308,7 @@ if ($aCMDResult['create-partition-tables'] || $aCMDResult['all']) {
 
 
 if ($aCMDResult['create-partition-functions'] || $aCMDResult['all']) {
-    echo "Partition Functions\n";
+    info('Create Partition Functions');
     $bDidSomething = true;
 
     $sTemplate = file_get_contents(CONST_BasePath.'/sql/partition-functions.src.sql');
@@ -295,24 +321,22 @@ if ($aCMDResult['import-wikipedia-articles'] || $aCMDResult['all']) {
     $sWikiArticlesFile = CONST_Wikipedia_Data_Path.'/wikipedia_article.sql.bin';
     $sWikiRedirectsFile = CONST_Wikipedia_Data_Path.'/wikipedia_redirect.sql.bin';
     if (file_exists($sWikiArticlesFile)) {
-        echo "Importing wikipedia articles...";
+        info('Importing wikipedia articles');
         pgsqlRunDropAndRestore($sWikiArticlesFile);
-        echo "...done\n";
     } else {
-        echo "WARNING: wikipedia article dump file not found - places will have default importance\n";
+        warn('wikipedia article dump file not found - places will have default importance');
     }
     if (file_exists($sWikiRedirectsFile)) {
-        echo "Importing wikipedia redirects...";
+        info('Importing wikipedia redirects');
         pgsqlRunDropAndRestore($sWikiRedirectsFile);
-        echo "...done\n";
     } else {
-        echo "WARNING: wikipedia redirect dump file not found - some place importance values may be missing\n";
+        warn('wikipedia redirect dump file not found - some place importance values may be missing');
     }
 }
 
 
 if ($aCMDResult['load-data'] || $aCMDResult['all']) {
-    echo "Drop old Data\n";
+    info('Drop old Data');
     $bDidSomething = true;
 
     $oDB =& getDB();
@@ -355,29 +379,36 @@ if ($aCMDResult['load-data'] || $aCMDResult['all']) {
 
     // pre-create the word list
     if (!$aCMDResult['disable-token-precalc']) {
-        echo "Loading word list\n";
+        info('Loading word list');
         pgsqlRunScriptFile(CONST_BasePath.'/data/words.sql');
     }
 
-    echo "Load Data\n";
+    info('Load Data');
+    $sColumns = 'osm_type, osm_id, class, type, name, admin_level, address, extratags, geometry';
+
     $aDBInstances = array();
     $iLoadThreads = max(1, $iInstances - 1);
     for ($i = 0; $i < $iLoadThreads; $i++) {
         $aDBInstances[$i] =& getDB(true);
-        $sSQL = 'insert into placex (osm_type, osm_id, class, type, name, admin_level, ';
-        $sSQL .= 'housenumber, street, addr_place, isin, postcode, country_code, extratags, ';
-        $sSQL .= 'geometry) select * from place where osm_id % '.$iLoadThreads.' = '.$i;
-        $sSQL .= " and not (class='place' and type='houses' and osm_type='W' and ST_GeometryType(geometry) = 'ST_LineString')";
+        $sSQL = "INSERT INTO placex ($sColumns) SELECT $sColumns FROM place WHERE osm_id % $iLoadThreads = $i";
+        $sSQL .= " and not (class='place' and type='houses' and osm_type='W'";
+        $sSQL .= "          and ST_GeometryType(geometry) = 'ST_LineString')";
+        $sSQL .= ' and ST_IsValid(geometry)';
         if ($aCMDResult['verbose']) echo "$sSQL\n";
-        if (!pg_send_query($aDBInstances[$i]->connection, $sSQL)) fail(pg_last_error($oDB->connection));
+        if (!pg_send_query($aDBInstances[$i]->connection, $sSQL)) {
+            fail(pg_last_error($aDBInstances[$i]->connection));
+        }
     }
     // last thread for interpolation lines
     $aDBInstances[$iLoadThreads] =& getDB(true);
-    $sSQL = 'select insert_osmline (osm_id, housenumber, street, addr_place, postcode, country_code, ';
-    $sSQL .= 'geometry) from place where ';
+    $sSQL = 'insert into location_property_osmline';
+    $sSQL .= ' (osm_id, address, linegeo)';
+    $sSQL .= ' SELECT osm_id, address, geometry from place where ';
     $sSQL .= "class='place' and type='houses' and osm_type='W' and ST_GeometryType(geometry) = 'ST_LineString'";
     if ($aCMDResult['verbose']) echo "$sSQL\n";
-    if (!pg_send_query($aDBInstances[$i]->connection, $sSQL)) fail(pg_last_error($oDB->connection));
+    if (!pg_send_query($aDBInstances[$iLoadThreads]->connection, $sSQL)) {
+        fail(pg_last_error($aDBInstances[$iLoadThreads]->connection));
+    }
 
     $bAnyBusy = true;
     while ($bAnyBusy) {
@@ -389,11 +420,22 @@ if ($aCMDResult['load-data'] || $aCMDResult['all']) {
         echo '.';
     }
     echo "\n";
-    echo "Reanalysing database...\n";
+    info('Reanalysing database');
     pgsqlRunScript('ANALYSE');
+
+    $sDatabaseDate = getDatabaseDate($oDB);
+    pg_query($oDB->connection, 'TRUNCATE import_status');
+    if ($sDatabaseDate === false) {
+        warn('could not determine database date.');
+    } else {
+        $sSQL = "INSERT INTO import_status (lastimportdate) VALUES('".$sDatabaseDate."')";
+        pg_query($oDB->connection, $sSQL);
+        echo "Latest data imported from $sDatabaseDate.\n";
+    }
 }
 
 if ($aCMDResult['import-tiger-data']) {
+    info('Import Tiger data');
     $bDidSomething = true;
 
     $sTemplate = file_get_contents(CONST_BasePath.'/sql/tiger_import_start.sql');
@@ -417,7 +459,7 @@ if ($aCMDResult['import-tiger-data']) {
 
     foreach (glob(CONST_Tiger_Data_Path.'/*.sql') as $sFile) {
         echo $sFile.': ';
-        $hFile = fopen($sFile, "r");
+        $hFile = fopen($sFile, 'r');
         $sSQL = fgets($hFile, 100000);
         $iLines = 0;
 
@@ -430,7 +472,7 @@ if ($aCMDResult['import-tiger-data']) {
                     if (!pg_send_query($aDBInstances[$i]->connection, $sSQL)) fail(pg_last_error($oDB->connection));
                     $iLines++;
                     if ($iLines == 1000) {
-                        echo ".";
+                        echo '.';
                         $iLines = 0;
                     }
                 }
@@ -451,7 +493,7 @@ if ($aCMDResult['import-tiger-data']) {
         echo "\n";
     }
 
-    echo "Creating indexes\n";
+    info('Creating indexes on Tiger data');
     $sTemplate = file_get_contents(CONST_BasePath.'/sql/tiger_import_finish.sql');
     $sTemplate = str_replace('{www-user}', CONST_Database_Web_User, $sTemplate);
     $sTemplate = replace_tablespace(
@@ -468,116 +510,89 @@ if ($aCMDResult['import-tiger-data']) {
 }
 
 if ($aCMDResult['calculate-postcodes'] || $aCMDResult['all']) {
+    info('Calculate Postcodes');
     $bDidSomething = true;
     $oDB =& getDB();
-    if (!pg_query($oDB->connection, 'DELETE from placex where osm_type=\'P\'')) fail(pg_last_error($oDB->connection));
-    $sSQL = "insert into placex (osm_type,osm_id,class,type,postcode,calculated_country_code,geometry) ";
-    $sSQL .= "select 'P',nextval('seq_postcodes'),'place','postcode',postcode,calculated_country_code,";
-    $sSQL .= "ST_SetSRID(ST_Point(x,y),4326) as geometry from (select calculated_country_code,postcode,";
-    $sSQL .= "avg(st_x(st_centroid(geometry))) as x,avg(st_y(st_centroid(geometry))) as y ";
-    $sSQL .= "from placex where postcode is not null group by calculated_country_code,postcode) as x";
-    if (!pg_query($oDB->connection, $sSQL)) fail(pg_last_error($oDB->connection));
+    if (!pg_query($oDB->connection, 'TRUNCATE location_postcode')) {
+        fail(pg_last_error($oDB->connection));
+    }
+
+    $sSQL  = 'INSERT INTO location_postcode';
+    $sSQL .= ' (place_id, indexed_status, country_code, postcode, geometry) ';
+    $sSQL .= "SELECT nextval('seq_place'), 1, country_code,";
+    $sSQL .= "       upper(trim (both ' ' from address->'postcode')) as pc,";
+    $sSQL .= '       ST_Centroid(ST_Collect(ST_Centroid(geometry)))';
+    $sSQL .= '  FROM placex';
+    $sSQL .= " WHERE address ? 'postcode' AND address->'postcode' NOT SIMILAR TO '%(,|;)%'";
+    $sSQL .= '       AND geometry IS NOT null';
+    $sSQL .= ' GROUP BY country_code, pc';
+
+    if (!pg_query($oDB->connection, $sSQL)) {
+        fail(pg_last_error($oDB->connection));
+    }
 
     if (CONST_Use_Extra_US_Postcodes) {
-        $sSQL = "insert into placex (osm_type,osm_id,class,type,postcode,calculated_country_code,geometry) ";
-        $sSQL .= "select 'P',nextval('seq_postcodes'),'place','postcode',postcode,'us',";
-        $sSQL .= "ST_SetSRID(ST_Point(x,y),4326) as geometry from us_postcode";
+        // only add postcodes that are not yet available in OSM
+        $sSQL  = 'INSERT INTO location_postcode';
+        $sSQL .= ' (place_id, indexed_status, country_code, postcode, geometry) ';
+        $sSQL .= "SELECT nextval('seq_place'), 1, 'us', postcode,";
+        $sSQL .= '       ST_SetSRID(ST_Point(x,y),4326)';
+        $sSQL .= '  FROM us_postcode WHERE postcode NOT IN';
+        $sSQL .= '        (SELECT postcode FROM location_postcode';
+        $sSQL .= "          WHERE country_code = 'us')";
         if (!pg_query($oDB->connection, $sSQL)) fail(pg_last_error($oDB->connection));
+    }
+
+    // add missing postcodes for GB (if available)
+    $sSQL  = 'INSERT INTO location_postcode';
+    $sSQL .= ' (place_id, indexed_status, country_code, postcode, geometry) ';
+    $sSQL .= "SELECT nextval('seq_place'), 1, 'gb', postcode, geometry";
+    $sSQL .= '  FROM gb_postcode WHERE postcode NOT IN';
+    $sSQL .= '           (SELECT postcode FROM location_postcode';
+    $sSQL .= "             WHERE country_code = 'gb')";
+    if (!pg_query($oDB->connection, $sSQL)) fail(pg_last_error($oDB->connection));
+
+    if (!$aCMDResult['all']) {
+        $sSQL = "DELETE FROM word WHERE class='place' and type='postcode'";
+        $sSQL .= 'and word NOT IN (SELECT postcode FROM location_postcode)';
+        if (!pg_query($oDB->connection, $sSQL)) {
+            fail(pg_last_error($oDB->connection));
+        }
+    }
+    $sSQL = 'SELECT count(getorcreate_postcode_id(v)) FROM ';
+    $sSQL .= '(SELECT distinct(postcode) as v FROM location_postcode) p';
+
+    if (!pg_query($oDB->connection, $sSQL)) {
+        fail(pg_last_error($oDB->connection));
     }
 }
 
-if ($aCMDResult['osmosis-init'] || ($aCMDResult['all'] && !$aCMDResult['drop'])) { // no use doing osmosis-init when dropping update tables
+if ($aCMDResult['osmosis-init']) {
     $bDidSomething = true;
-    $oDB =& getDB();
-
-    if (!file_exists(CONST_Osmosis_Binary)) {
-        echo "Please download osmosis.\nIf it is already installed, check the path in your local settings (settings/local.php) file.\n";
-        if (!$aCMDResult['all']) {
-            fail("osmosis not found in '".CONST_Osmosis_Binary."'");
-        }
-    } else {
-        if (file_exists(CONST_InstallPath.'/settings/configuration.txt')) {
-            echo "settings/configuration.txt already exists\n";
-        } else {
-            passthru(CONST_Osmosis_Binary.' --read-replication-interval-init '.CONST_InstallPath.'/settings');
-            // update osmosis configuration.txt with our settings
-            passthru("sed -i 's!baseUrl=.*!baseUrl=".CONST_Replication_Url."!' ".CONST_InstallPath.'/settings/configuration.txt');
-            passthru("sed -i 's:maxInterval = .*:maxInterval = ".CONST_Replication_MaxInterval.":' ".CONST_InstallPath.'/settings/configuration.txt');
-        }
-
-        // Find the last node in the DB
-        $iLastOSMID = $oDB->getOne("select max(osm_id) from place where osm_type = 'N'");
-
-        // Lookup the timestamp that node was created (less 3 hours for margin for changsets to be closed)
-        $sLastNodeURL = 'http://www.openstreetmap.org/api/0.6/node/'.$iLastOSMID."/1";
-        $sLastNodeXML = file_get_contents($sLastNodeURL);
-        preg_match('#timestamp="(([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})Z)"#', $sLastNodeXML, $aLastNodeDate);
-        $iLastNodeTimestamp = strtotime($aLastNodeDate[1]) - (3*60*60);
-
-        // Search for the correct state file - uses file timestamps so need to sort by date descending
-        $sRepURL = CONST_Replication_Url."/";
-        $sRep = file_get_contents($sRepURL."?C=M;O=D;F=1");
-        // download.geofabrik.de:    <a href="000/">000/</a></td><td align="right">26-Feb-2013 11:53  </td>
-        // planet.openstreetmap.org: <a href="273/">273/</a>                    2013-03-11 07:41    -
-        preg_match_all('#<a href="[0-9]{3}/">([0-9]{3}/)</a>\s*([-0-9a-zA-Z]+ [0-9]{2}:[0-9]{2})#', $sRep, $aRepMatches, PREG_SET_ORDER);
-        if ($aRepMatches) {
-            $aPrevRepMatch = false;
-            foreach ($aRepMatches as $aRepMatch) {
-                if (strtotime($aRepMatch[2]) < $iLastNodeTimestamp) break;
-                $aPrevRepMatch = $aRepMatch;
-            }
-            if ($aPrevRepMatch) $aRepMatch = $aPrevRepMatch;
-
-            $sRepURL .= $aRepMatch[1];
-            $sRep = file_get_contents($sRepURL."?C=M;O=D;F=1");
-            preg_match_all('#<a href="[0-9]{3}/">([0-9]{3}/)</a>\s*([-0-9a-zA-Z]+ [0-9]{2}:[0-9]{2})#', $sRep, $aRepMatches, PREG_SET_ORDER);
-            $aPrevRepMatch = false;
-            foreach ($aRepMatches as $aRepMatch) {
-                if (strtotime($aRepMatch[2]) < $iLastNodeTimestamp) break;
-                $aPrevRepMatch = $aRepMatch;
-            }
-            if ($aPrevRepMatch) $aRepMatch = $aPrevRepMatch;
-
-            $sRepURL .= $aRepMatch[1];
-            $sRep = file_get_contents($sRepURL."?C=M;O=D;F=1");
-            preg_match_all('#<a href="[0-9]{3}.state.txt">([0-9]{3}).state.txt</a>\s*([-0-9a-zA-Z]+ [0-9]{2}:[0-9]{2})#', $sRep, $aRepMatches, PREG_SET_ORDER);
-            $aPrevRepMatch = false;
-            foreach ($aRepMatches as $aRepMatch) {
-                if (strtotime($aRepMatch[2]) < $iLastNodeTimestamp) break;
-                $aPrevRepMatch = $aRepMatch;
-            }
-            if ($aPrevRepMatch) $aRepMatch = $aPrevRepMatch;
-
-            $sRepURL .= $aRepMatch[1].'.state.txt';
-            echo "Getting state file: $sRepURL\n";
-            $sStateFile = file_get_contents($sRepURL);
-            if (!$sStateFile || strlen($sStateFile) > 1000) fail("unable to obtain state file");
-            file_put_contents(CONST_InstallPath.'/settings/state.txt', $sStateFile);
-            echo "Updating DB status\n";
-            pg_query($oDB->connection, 'TRUNCATE import_status');
-            $sSQL = "INSERT INTO import_status VALUES('".$aRepMatch[2]."')";
-            pg_query($oDB->connection, $sSQL);
-        } else {
-            if (!$aCMDResult['all']) {
-                fail("Cannot read state file directory.");
-            }
-        }
-    }
+    echo "Command 'osmosis-init' no longer available, please use utils/update.php --init-updates.\n";
 }
 
 if ($aCMDResult['index'] || $aCMDResult['all']) {
     $bDidSomething = true;
     $sOutputFile = '';
     $sBaseCmd = CONST_InstallPath.'/nominatim/nominatim -i -d '.$aDSNInfo['database'].' -P '.$aDSNInfo['port'].' -t '.$iInstances.$sOutputFile;
+    info('Index ranks 0 - 4');
     passthruCheckReturn($sBaseCmd.' -R 4');
     if (!$aCMDResult['index-noanalyse']) pgsqlRunScript('ANALYSE');
+    info('Index ranks 5 - 25');
     passthruCheckReturn($sBaseCmd.' -r 5 -R 25');
     if (!$aCMDResult['index-noanalyse']) pgsqlRunScript('ANALYSE');
+    info('Index ranks 26 - 30');
     passthruCheckReturn($sBaseCmd.' -r 26');
+
+    info('Index postcodes');
+    $oDB =& getDB();
+    $sSQL = 'UPDATE location_postcode SET indexed_status = 0';
+    if (!pg_query($oDB->connection, $sSQL)) fail(pg_last_error($oDB->connection));
 }
 
 if ($aCMDResult['create-search-indices'] || $aCMDResult['all']) {
-    echo "Search indices\n";
+    info('Create Search indices');
     $bDidSomething = true;
 
     $sTemplate = file_get_contents(CONST_BasePath.'/sql/indices.src.sql');
@@ -601,12 +616,12 @@ if ($aCMDResult['create-search-indices'] || $aCMDResult['all']) {
 }
 
 if ($aCMDResult['create-country-names'] || $aCMDResult['all']) {
-    echo 'Creating search index for default country names';
+    info('Create search index for default country names');
     $bDidSomething = true;
 
     pgsqlRunScript("select getorcreate_country(make_standard_name('uk'), 'gb')");
     pgsqlRunScript("select getorcreate_country(make_standard_name('united states'), 'us')");
-    pgsqlRunScript("select count(*) from (select getorcreate_country(make_standard_name(country_code), country_code) from country_name where country_code is not null) as x");
+    pgsqlRunScript('select count(*) from (select getorcreate_country(make_standard_name(country_code), country_code) from country_name where country_code is not null) as x');
     pgsqlRunScript("select count(*) from (select getorcreate_country(make_standard_name(name->'name'), country_code) from country_name where name ? 'name') as x");
 
     $sSQL = 'select count(*) from (select getorcreate_country(make_standard_name(v), country_code) from (select country_code, skeys(name) as k, svals(name) as v from country_name) x where k ';
@@ -627,6 +642,7 @@ if ($aCMDResult['create-country-names'] || $aCMDResult['all']) {
 }
 
 if ($aCMDResult['drop']) {
+    info('Drop tables only required for updates');
     // The implementation is potentially a bit dangerous because it uses
     // a positive selection of tables to keep, and deletes everything else.
     // Including any tables that the unsuspecting user might have manually
@@ -635,21 +651,21 @@ if ($aCMDResult['drop']) {
 
     // tables we want to keep. everything else goes.
     $aKeepTables = array(
-                    "*columns",
-                    "import_polygon_*",
-                    "import_status",
-                    "place_addressline",
-                    "location_property*",
-                    "placex",
-                    "search_name",
-                    "seq_*",
-                    "word",
-                    "query_log",
-                    "new_query_log",
-                    "gb_postcode",
-                    "spatial_ref_sys",
-                    "country_name",
-                    "place_classtype_*"
+                    '*columns',
+                    'import_polygon_*',
+                    'import_status',
+                    'place_addressline',
+                    'location_postcode',
+                    'location_property*',
+                    'placex',
+                    'search_name',
+                    'seq_*',
+                    'word',
+                    'query_log',
+                    'new_query_log',
+                    'spatial_ref_sys',
+                    'country_name',
+                    'place_classtype_*'
                    );
 
     $oDB =& getDB();
@@ -675,7 +691,7 @@ if ($aCMDResult['drop']) {
     }
 
     if (!is_null(CONST_Osm2pgsql_Flatnode_File)) {
-        if ($aCMDResult['verbose']) echo "deleting ".CONST_Osm2pgsql_Flatnode_File."\n";
+        if ($aCMDResult['verbose']) echo 'deleting '.CONST_Osm2pgsql_Flatnode_File."\n";
         unlink(CONST_Osm2pgsql_Flatnode_File);
     }
 }
@@ -683,18 +699,25 @@ if ($aCMDResult['drop']) {
 if (!$bDidSomething) {
     showUsage($aCMDOptions, true);
 } else {
-    echo "Setup finished.\n";
+    echo "Summary of warnings:\n\n";
+    repeatWarnings();
+    echo "\n";
+    info('Setup finished.');
 }
 
 
 function pgsqlRunScriptFile($sFilename)
 {
+    global $aCMDResult;
     if (!file_exists($sFilename)) fail('unable to find '.$sFilename);
 
     // Convert database DSN to psql parameters
     $aDSNInfo = DB::parseDSN(CONST_Database_DSN);
     if (!isset($aDSNInfo['port']) || !$aDSNInfo['port']) $aDSNInfo['port'] = 5432;
     $sCMD = 'psql -p '.$aDSNInfo['port'].' -d '.$aDSNInfo['database'];
+    if (!$aCMDResult['verbose']) {
+        $sCMD .= ' -q';
+    }
 
     $ahGzipPipes = null;
     if (preg_match('/\\.gz$/', $sFilename)) {
@@ -741,31 +764,12 @@ function pgsqlRunScriptFile($sFilename)
 function pgsqlRunScript($sScript, $bfatal = true)
 {
     global $aCMDResult;
-    // Convert database DSN to psql parameters
-    $aDSNInfo = DB::parseDSN(CONST_Database_DSN);
-    if (!isset($aDSNInfo['port']) || !$aDSNInfo['port']) $aDSNInfo['port'] = 5432;
-    $sCMD = 'psql -p '.$aDSNInfo['port'].' -d '.$aDSNInfo['database'];
-    if ($bfatal && !$aCMDResult['ignore-errors'])
-        $sCMD .= ' -v ON_ERROR_STOP=1';
-    $aDescriptors = array(
-                     0 => array('pipe', 'r'),
-                     1 => STDOUT,
-                     2 => STDERR
-                    );
-    $ahPipes = null;
-    $hProcess = @proc_open($sCMD, $aDescriptors, $ahPipes);
-    if (!is_resource($hProcess)) fail('unable to start pgsql');
-
-    while (strlen($sScript)) {
-        $written = fwrite($ahPipes[0], $sScript);
-        if ($written <= 0) break;
-        $sScript = substr($sScript, $written);
-    }
-    fclose($ahPipes[0]);
-    $iReturn = proc_close($hProcess);
-    if ($bfatal && $iReturn > 0) {
-        fail("pgsql returned with error code ($iReturn)");
-    }
+    runSQLScript(
+        $sScript,
+        $bfatal,
+        $aCMDResult['verbose'],
+        $aCMDResult['ignore-errors']
+    );
 }
 
 function pgsqlRunPartitionScript($sTemplate)

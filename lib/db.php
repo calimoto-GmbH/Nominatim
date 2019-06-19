@@ -8,7 +8,7 @@ function &getDB($bNew = false, $bPersistent = false)
     // Get the database object
     $oDB = chksql(
         DB::connect(CONST_Database_DSN.($bNew?'?new_link=true':''), $bPersistent),
-        "Failed to establish database connection"
+        'Failed to establish database connection'
     );
     $oDB->setFetchMode(DB_FETCHMODE_ASSOC);
     $oDB->query("SET DateStyle TO 'sql,european'");
@@ -21,6 +21,11 @@ function &getDB($bNew = false, $bPersistent = false)
 function getDBQuoted($s)
 {
     return "'".pg_escape_string($s)."'";
+}
+
+function getArraySQL($a)
+{
+    return 'ARRAY['.join(',', $a).']';
 }
 
 function getPostgresVersion(&$oDB)

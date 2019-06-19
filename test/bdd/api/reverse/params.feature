@@ -1,6 +1,6 @@
 @APIDB
 Feature: Parameters for Reverse API
-    Testing diferent parameter options for reverse API.
+    Testing different parameter options for reverse API.
 
     Scenario Outline: Reverse-geocoding without address
         When sending <format> reverse coordinates 53.603,10.041
@@ -14,6 +14,15 @@ Feature: Parameters for Reverse API
       | json |
       | jsonv2 |
       | xml |
+
+    Scenario Outline: Coordinates must be floating-point numbers
+        When sending reverse coordinates <coords>
+        Then a HTTP 400 is returned
+
+    Examples:
+      | coords    |
+      | -45.3,;   |
+      | gkjd,50   |
 
     Scenario Outline: Reverse Geocoding with extratags
         When sending <format> reverse coordinates 10.776234290950017,106.70425325632095

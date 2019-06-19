@@ -17,6 +17,10 @@ if (isset($_GET['debug']) && $_GET['debug']) @define('CONST_Debug', true);
 // codes, to restrict import to a subset of languages.
 // Currently only affects the import of country names and special phrases.
 @define('CONST_Languages', false);
+// Rules for normalizing terms for comparison before doing comparisons.
+// The default is to remove accents and punctuation and to lower-case the
+// term. Spaces are kept but collapsed to one standard space.
+@define('CONST_Term_Normalization_Rules', ":: NFD (); [:Nonspacing Mark:] >;  :: lower (); [[:Punctuation:][:Space:]]+ > ' '; :: NFC ();");
 
 // Set to false to avoid importing extra postcodes for the US.
 @define('CONST_Use_Extra_US_Postcodes', true);
@@ -39,10 +43,11 @@ if (isset($_GET['debug']) && $_GET['debug']) @define('CONST_Debug', true);
 @define('CONST_HTTP_Proxy_Password', '');
 
 // Paths
+@define('CONST_ExtraDataPath', CONST_BasePath.'/data');
 @define('CONST_Osm2pgsql_Binary', CONST_InstallPath.'/osm2pgsql/osm2pgsql');
-@define('CONST_Osmosis_Binary', '/usr/bin/osmosis');
-@define('CONST_Tiger_Data_Path', CONST_BasePath.'/data/tiger');
-@define('CONST_Wikipedia_Data_Path', CONST_BasePath.'/data');
+@define('CONST_Pyosmium_Binary', '@PYOSMIUM_PATH@');
+@define('CONST_Tiger_Data_Path', CONST_ExtraDataPath.'/tiger');
+@define('CONST_Wikipedia_Data_Path', CONST_ExtraDataPath);
 
 // osm2pgsql settings
 @define('CONST_Osm2pgsql_Flatnode_File', null);
@@ -64,11 +69,18 @@ if (isset($_GET['debug']) && $_GET['debug']) @define('CONST_Debug', true);
 @define('CONST_Tablespace_Aux_Data', false);
 @define('CONST_Tablespace_Aux_Index', false);
 
-// Replication settings
-@define('CONST_Replication_Url', 'http://planet.openstreetmap.org/replication/minute');
-@define('CONST_Replication_MaxInterval', '3600');
-@define('CONST_Replication_Update_Interval', '60');  // How often upstream publishes diffs
-@define('CONST_Replication_Recheck_Interval', '60'); // How long to sleep if no update found yet
+//// Replication settings
+
+// Base URL of replication service
+@define('CONST_Replication_Url', 'https://planet.openstreetmap.org/replication/minute');
+
+// Maximum size in MB of data to download per batch
+@define('CONST_Replication_Max_Diff_size', '30');
+// How long until the service publishes the next diff
+// (relative to the age of data in the diff).
+@define('CONST_Replication_Update_Interval', '75');
+// How long to sleep when no update could be found
+@define('CONST_Replication_Recheck_Interval', '60');
 
 // Website settings
 @define('CONST_NoAccessControl', true);
@@ -82,14 +94,13 @@ if (isset($_GET['debug']) && $_GET['debug']) @define('CONST_Debug', true);
 @define('CONST_Default_Lat', 20.0);
 @define('CONST_Default_Lon', 0.0);
 @define('CONST_Default_Zoom', 2);
-@define('CONST_Map_Tile_URL', 'http://{s}.tile.osm.org/{z}/{x}/{y}.png');
+@define('CONST_Map_Tile_URL', 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
 @define('CONST_Map_Tile_Attribution', ''); // Set if tile source isn't osm.org
 
 @define('CONST_Search_AreaPolygons', true);
 
 @define('CONST_Search_BatchMode', false);
 
-@define('CONST_Search_TryDroppedAddressTerms', false);
 @define('CONST_Search_NameOnlySearchFrequencyThreshold', 500);
 // If set to true, then reverse order of queries will be tried by default.
 // When set to false only selected languages alloow reverse search.

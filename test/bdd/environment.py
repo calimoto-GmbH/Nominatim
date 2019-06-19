@@ -4,6 +4,7 @@ import os
 import psycopg2
 import psycopg2.extras
 import subprocess
+import tempfile
 from nose.tools import * # for assert functions
 from sys import version_info as python_version
 
@@ -16,7 +17,8 @@ userconfig = {
     'TEMPLATE_DB' : 'test_template_nominatim',
     'TEST_DB' : 'test_nominatim',
     'API_TEST_DB' : 'test_api_nominatim',
-    'TEST_SETTINGS_FILE' : '/tmp/nominatim_settings.php'
+    'TEST_SETTINGS_FILE' : '/tmp/nominatim_settings.php',
+    'PHPCOV' : False, # set to output directory to enable code coverage
 }
 
 use_step_matcher("re")
@@ -27,19 +29,29 @@ class NominatimEnvironment(object):
 
     def __init__(self, config):
         self.build_dir = os.path.abspath(config['BUILDDIR'])
+        self.src_dir = os.path.abspath(os.path.join(os.path.split(__file__)[0], "../.."))
         self.template_db = config['TEMPLATE_DB']
         self.test_db = config['TEST_DB']
         self.api_test_db = config['API_TEST_DB']
         self.local_settings_file = config['TEST_SETTINGS_FILE']
         self.reuse_template = not config['REMOVE_TEMPLATE']
         self.keep_scenario_db = config['KEEP_TEST_DB']
+        self.code_coverage_path = config['PHPCOV']
+        self.code_coverage_id = 1
         os.environ['NOMINATIM_SETTINGS'] = self.local_settings_file
 
         self.template_db_done = False
 
+    def next_code_coverage_file(self):
+        fn = os.path.join(self.code_coverage_path, "%06d.cov" % self.code_coverage_id)
+        self.code_coverage_id += 1
+
+        return fn
+
     def write_nominatim_config(self, dbname):
         f = open(self.local_settings_file, 'w')
         f.write("<?php\n  @define('CONST_Database_DSN', 'pgsql://@/%s');\n" % dbname)
+        f.write("@define('CONST_Osm2pgsql_Flatnode_File', null);\n")
         f.close()
 
     def cleanup(self):
@@ -87,17 +99,20 @@ class NominatimEnvironment(object):
         conn.commit()
         conn.close()
 
-        # execute osm2pgsql on an empty file to get the right tables
-        osm2pgsql = os.path.join(self.build_dir, 'osm2pgsql', 'osm2pgsql')
-        proc = subprocess.Popen([osm2pgsql, '-lsc', '-r', 'xml',
-                                 '-O', 'gazetteer', '-d', self.template_db, '-'],
-                                cwd=self.build_dir, stdin=subprocess.PIPE,
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        [outstr, errstr] = proc.communicate(input=b'<osm version="0.6"></osm>')
-        logger.debug("running osm2pgsql for template: %s\n%s\n%s" % (osm2pgsql, outstr, errstr))
-        self.run_setup_script('create-functions', 'create-tables',
-                              'create-partition-tables', 'create-partition-functions',
-                              'load-data', 'create-search-indices')
+        # execute osm2pgsql import on an empty file to get the right tables
+        with tempfile.NamedTemporaryFile(dir='/tmp', suffix='.xml') as fd:
+            fd.write(b'<osm version="0.6"></osm>')
+            fd.flush()
+            self.run_setup_script('import-data',
+                                  'ignore-errors',
+                                  'create-functions',
+                                  'create-tables',
+                                  'create-partition-tables',
+                                  'create-partition-functions',
+                                  'load-data',
+                                  'create-search-indices',
+                                  osm_file=fd.name,
+                                  osm2pgsql_cache='200')
 
     def setup_api_db(self, context):
         self.write_nominatim_config(self.api_test_db)
@@ -149,18 +164,32 @@ class OSMDataFactory(object):
         self.scene_path = os.environ.get('SCENE_PATH',
                            os.path.join(scriptpath, '..', 'scenes', 'data'))
         self.scene_cache = {}
+        self.clear_grid()
 
     def parse_geometry(self, geom, scene):
         if geom.find(':') >= 0:
-            out = self.get_scene_geometry(scene, geom)
-        elif geom.find(',') < 0:
-            out = "'POINT(%s)'::geometry" % geom
-        elif geom.find('(') < 0:
-            out = "'LINESTRING(%s)'::geometry" % geom
-        else:
-            out = "'POLYGON(%s)'::geometry" % geom
+            return "ST_SetSRID(%s, 4326)" % self.get_scene_geometry(scene, geom)
 
-        return "ST_SetSRID(%s, 4326)" % out
+        if geom.find(',') < 0:
+            out = "POINT(%s)" % self.mk_wkt_point(geom)
+        elif geom.find('(') < 0:
+            line = ','.join([self.mk_wkt_point(x) for x in geom.split(',')])
+            out = "LINESTRING(%s)" % line
+        else:
+            inner = geom.strip('() ')
+            line = ','.join([self.mk_wkt_point(x) for x in inner.split(',')])
+            out = "POLYGON((%s))" % line
+
+        return "ST_SetSRID('%s'::geometry, 4326)" % out
+
+    def mk_wkt_point(self, point):
+        geom = point.strip()
+        if geom.find(' ') >= 0:
+            return geom
+        else:
+            pt = self.grid_node(int(geom))
+            assert_is_not_none(pt, "Point not found in grid")
+            return "%f %f" % pt
 
     def get_scene_geometry(self, default_scene, name):
         geoms = []
@@ -195,6 +224,15 @@ class OSMDataFactory(object):
             self.scene_cache[name] = scene
 
         return scene
+
+    def clear_grid(self):
+        self.grid = {}
+
+    def add_grid_node(self, nodeid, x, y):
+        self.grid[nodeid] = (x, y)
+
+    def grid_node(self, nodeid):
+        return self.grid.get(nodeid)
 
 
 def before_all(context):

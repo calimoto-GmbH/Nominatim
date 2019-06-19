@@ -5,7 +5,7 @@ foreach($aSearchResults as $iResNum => $aPointDetails)
 {
     $aPlace = array(
             'place_id'=>$aPointDetails['place_id'],
-            'licence'=>"Data © OpenStreetMap contributors, ODbL 1.0. http://www.openstreetmap.org/copyright",
+            'licence'=>"Data © OpenStreetMap contributors, ODbL 1.0. https://osm.org/copyright",
         );
 
     $sOSMType = formatOSMType($aPointDetails['osm_type']);
@@ -19,7 +19,7 @@ foreach($aSearchResults as $iResNum => $aPointDetails)
     {
         $aPlace['boundingbox'] = $aPointDetails['aBoundingBox'];
 
-        if (isset($aPointDetails['aPolyPoints']) && $bShowPolygons)
+        if (isset($aPointDetails['aPolyPoints']))
         {
             $aPlace['polygonpoints'] = $aPointDetails['aPolyPoints'];
         }

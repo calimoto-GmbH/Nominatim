@@ -89,7 +89,7 @@ Feature: Simple Tests
           | attr        | value |
           | querystring | xnznxvcx |
           | polygon     | false |
-          | more_url    | .*format=xml.*q=xnznxvcx.* |
+          | more_url    | .*q=xnznxvcx.*format=xml |
 
     Scenario: Empty XML search with special XML characters
         When sending xml search query "xfdghn&zxn"xvbyx<vxx>cssdex"
@@ -97,17 +97,17 @@ Feature: Simple Tests
           | attr        | value |
           | querystring | xfdghn&zxn"xvbyx<vxx>cssdex |
           | polygon     | false |
-          | more_url    | .*format=xml.*q=xfdghn%26zxn%22xvbyx%3Cvxx%3Ecssdex.* |
+          | more_url    | .*q=xfdghn%26zxn%22xvbyx%3Cvxx%3Ecssdex.*format=xml |
 
     Scenario: Empty XML search with viewbox
         When sending xml search query "xnznxvcx"
           | viewbox |
-          | 12,45.13,77,33 |
+          | 12,33,77,45.13 |
         Then result header contains
           | attr        | value |
           | querystring | xnznxvcx |
           | polygon     | false |
-          | viewbox     | 12,45.13,77,33 |
+          | viewbox     | 12,33,77,45.13 |
 
     Scenario: Empty XML search with viewboxlbrt
         When sending xml search query "xnznxvcx"
@@ -117,17 +117,17 @@ Feature: Simple Tests
           | attr        | value |
           | querystring | xnznxvcx |
           | polygon     | false |
-          | viewbox     | 12,45,77,34.13 |
+          | viewbox     | 12,34.13,77,45 |
 
     Scenario: Empty XML search with viewboxlbrt and viewbox
         When sending xml search query "pub"
           | viewbox        | viewboxblrt |
-          | 12,45.13,77,33 | 1,2,3,4 |
+          | 12,33,77,45.13 | 1,2,3,4 |
         Then result header contains
           | attr        | value |
           | querystring | pub |
           | polygon     | false |
-          | viewbox     | 12,45.13,77,33 |
+          | viewbox     | 12,33,77,45.13 |
 
     Scenario Outline: Empty XML search with polygon values
         When sending xml search query "xnznxvcx"
@@ -225,4 +225,4 @@ Feature: Simple Tests
           | pl,1,,invalid,undefined,%3Cb%3E,bo,, |
        Then result header contains
           | attr     | value |
-          | more_url | .*&countrycodes=pl,bo&.* |
+          | more_url | .*&countrycodes=pl%2Cbo&.* |

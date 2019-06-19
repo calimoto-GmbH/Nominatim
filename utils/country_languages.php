@@ -9,7 +9,7 @@ ini_set('display_errors', 'stderr');
 
 $aCMDOptions
  = array(
-    "Import country language data from osm wiki",
+    'Import country language data from osm wiki',
     array('help', 'h', 0, 1, 0, 0, false, 'Show Help'),
     array('quiet', 'q', 0, 1, 0, 0, 'bool', 'Quiet output'),
     array('verbose', 'v', 0, 1, 0, 0, 'bool', 'Verbose output'),
@@ -19,7 +19,7 @@ getCmdOpt($_SERVER['argv'], $aCMDOptions, $aCMDResult, true, true);
 include(CONST_InstallPath.'/settings/phrase_settings.php');
 
 if (true) {
-    $sURL = 'http://wiki.openstreetmap.org/wiki/Special:Export/Nominatim/Country_Codes';
+    $sURL = 'https://wiki.openstreetmap.org/wiki/Special:Export/Nominatim/Country_Codes';
     $sWikiPageXML = file_get_contents($sURL);
     if (preg_match_all('#\\| ([a-z]{2}) \\|\\| [^|]+\\|\\| ([a-z,]+)#', $sWikiPageXML, $aMatches, PREG_SET_ORDER)) {
         foreach ($aMatches as $aMatch) {

@@ -1,7 +1,23 @@
 var map;
 var last_click_latlng;
 
-jQuery(document).on('ready', function(){
+function parse_and_normalize_geojson_string(raw_string){
+    // normalize places the geometry into a featurecollection, similar to
+    // https://github.com/mapbox/geojson-normalize
+    var parsed_geojson = {
+        type: "FeatureCollection",
+        features: [
+            {
+                type: "Feature",
+                geometry: JSON.parse(raw_string),
+                properties: {}
+            }
+        ]
+    };
+    return parsed_geojson;
+}
+
+jQuery(document).ready(function(){
 
     if ( !$('#search-page,#reverse-page').length ){ return; }
     
@@ -11,7 +27,7 @@ jQuery(document).on('ready', function(){
 
     map = new L.map('map', {
                 attributionControl: (nominatim_map_init.tile_attribution && nominatim_map_init.tile_attribution.length),
-                scrollWheelZoom:    !L.Browser.touch,
+                scrollWheelZoom:    true, // !L.Browser.touch,
                 touchZoom:          false
             });
 
@@ -22,6 +38,9 @@ jQuery(document).on('ready', function(){
     }).addTo(map);
 
     map.setView([nominatim_map_init.lat, nominatim_map_init.lon], nominatim_map_init.zoom);
+
+    var osm2 = new L.TileLayer(nominatim_map_init.tile_url, {minZoom: 0, maxZoom: 13, attribution: (nominatim_map_init.tile_attribution || null )});
+    var miniMap = new L.Control.MiniMap(osm2, {toggleDisplay: true}).addTo(map);
 
     if ( is_reverse_search ){
         // We don't need a marker, but an L.circle instance changes radius once you zoom in/out
@@ -74,9 +93,9 @@ jQuery(document).on('ready', function(){
         $('#map-position-inner').html([html_center,html_zoom,html_viewbox,html_click,html_mouse].join('<br/>'));
 
         var reverse_params = {
-            lat: map.getCenter().lat.toFixed(5),
-            lon: map.getCenter().lng.toFixed(5),
-            zoom: map.getZoom(),
+            // lat: map.getCenter().lat.toFixed(5),
+            // lon: map.getCenter().lng.toFixed(5),
+            // zoom: 2,
             format: 'html'
         }
         $('#switch-to-reverse').attr('href', 'reverse.php?' + $.param(reverse_params));
@@ -124,7 +143,7 @@ jQuery(document).on('ready', function(){
         ].join(',');
     }
     function map_link_to_osm(){
-        return "http://openstreetmap.org/#map=" + map.getZoom() + "/" + map.getCenter().lat + "/" + map.getCenter().lng;
+        return "https://openstreetmap.org/#map=" + map.getZoom() + "/" + map.getCenter().lat + "/" + map.getCenter().lng;
     }
 
     function get_result_element(position){
@@ -159,12 +178,18 @@ jQuery(document).on('ready', function(){
 
             var bounds = [[result.aBoundingBox[0]*1,result.aBoundingBox[2]*1], [result.aBoundingBox[1]*1,result.aBoundingBox[3]*1]];
             map.fitBounds(bounds);
-            if (result.astext && result.astext.match(/(POLY)|(LINE)/) ){
-                var geojson_layer = L.geoJson(null, {
-                    // http://leafletjs.com/reference.html#geojson-style
-                    style: function(feature) { return { clickable: false, color: 'blue' }; }
-                });
-                omnivore.wkt.parse(result.astext,null,geojson_layer);
+
+            if (result.asgeojson && result.asgeojson.match(/(Polygon)|(Line)/) ){
+
+                var geojson_layer = L.geoJson(
+                    parse_and_normalize_geojson_string(result.asgeojson),
+                    {
+                        // http://leafletjs.com/reference-1.0.3.html#path-option
+                        style: function(feature) {
+                            return { interactive: false, color: 'blue' }; 
+                        }
+                    }
+                );
                 layerGroup.addLayer(geojson_layer);
             }
             else {
@@ -173,15 +198,18 @@ jQuery(document).on('ready', function(){
             }
         }
         else {
-            if ( is_reverse_search ){
-                // make sure the search coordinates are in the map view as well
-                map.fitBounds([[result.lat,result.lon], [nominatim_map_init.lat,nominatim_map_init.lon]], {padding: [50,50], maxZoom: map.getZoom()});
+            var result_coord = L.latLng(result.lat, result.lon);
+            if ( result_coord ){
+                if ( is_reverse_search ){
+                    // make sure the search coordinates are in the map view as well
+                    map.fitBounds([result_coord, [nominatim_map_init.lat,nominatim_map_init.lon]], {padding: [50,50], maxZoom: map.getZoom()});
 
-                // better, but causes a leaflet warning
-                // map.panInsideBounds([[result.lat,result.lon], [nominatim_map_init.lat,nominatim_map_init.lon]], {animate: false});
-            }
-            else {
-                map.panTo([result.lat,result.lon], result.zoom || nominatim_map_init.zoom);
+                    // better, but causes a leaflet warning
+                    // map.panInsideBounds([[result.lat,result.lon], [nominatim_map_init.lat,nominatim_map_init.lon]], {animate: false});
+                }
+                else {
+                    map.panTo(result_coord, result.zoom || nominatim_map_init.zoom);
+                }
             }
         }
 
@@ -213,6 +241,8 @@ jQuery(document).on('ready', function(){
         });
 
         $('#switch-coords').on('click', function(e){
+            e.preventDefault();
+            e.stopPropagation();
             var lat = $('form input[name=lat]').val();
             var lon = $('form input[name=lon]').val();
             $('form input[name=lat]').val(lon);
@@ -223,11 +253,19 @@ jQuery(document).on('ready', function(){
 
     highlight_result(0, false);
 
+    // common mistake is to copy&paste latitude and longitude into the 'lat' search box
+    $('form input[name=lat]').on('change', function(){
+        var coords = $(this).val().split(',');
+        if (coords.length == 2) {
+            $(this).val(L.Util.trim(coords[0]));
+            $(this).siblings('input[name=lon]').val(L.Util.trim(coords[1]));
+        }
+    });
 
 });
 
 
-jQuery(document).on('ready', function(){
+jQuery(document).ready(function(){
 
     if ( !$('#details-page').length ){ return; }
 
@@ -236,7 +274,7 @@ jQuery(document).on('ready', function(){
                     // center: [nominatim_map_init.lat, nominatim_map_init.lon],
                     // zoom:   nominatim_map_init.zoom,
                     attributionControl: (nominatim_map_init.tile_attribution && nominatim_map_init.tile_attribution.length),
-                    scrollWheelZoom:    false,
+                    scrollWheelZoom:    true, // !L.Browser.touch,
                     touchZoom:          false,
                 });
 
@@ -246,25 +284,30 @@ jQuery(document).on('ready', function(){
             attribution: (nominatim_map_init.tile_attribution || null ) //'&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
-
         var layerGroup = new L.layerGroup().addTo(map);
 
         var circle = L.circleMarker([nominatim_result.lat,nominatim_result.lon], { radius: 10, weight: 2, fillColor: '#ff7800', color: 'blue', opacity: 0.75});
         map.addLayer(circle);
 
-        if ( nominatim_result.outlinestring ){
+        if ( nominatim_result.asgeojson ){
 
-            var geojson_layer = L.geoJson(null, {
-                // http://leafletjs.com/reference.html#geojson-style
-                style: function(feature) { return { clickable: false, color: 'blue' }; }
-            });
-            omnivore.wkt.parse(nominatim_result.outlinestring,null,geojson_layer);
-            layerGroup.addLayer(geojson_layer);
+            var geojson_layer = L.geoJson(
+                parse_and_normalize_geojson_string(nominatim_result.asgeojson),
+                {
+                    // http://leafletjs.com/reference-1.0.3.html#path-option
+                    style: function(feature) {
+                        return { interactive: false, color: 'blue' }; 
+                    }
+                }
+            );
+            map.addLayer(geojson_layer);
             map.fitBounds(geojson_layer.getBounds());
         } else {
             map.setView([nominatim_result.lat,nominatim_result.lon],10);
         }
 
+        var osm2 = new L.TileLayer(nominatim_map_init.tile_url, {minZoom: 0, maxZoom: 13, attribution: (nominatim_map_init.tile_attribution || null )});
+        var miniMap = new L.Control.MiniMap(osm2, {toggleDisplay: true}).addTo(map);
 
 
 });

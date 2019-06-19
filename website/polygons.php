@@ -9,7 +9,7 @@ ini_set('memory_limit', '200M');
 $oParams = new Nominatim\ParameterParser();
 
 $sOutputFormat = 'html';
-$iDays = $oParams->getInt('days', 1);
+$iDays = $oParams->getInt('days', false);
 $bReduced = $oParams->getBool('reduced', false);
 $sClass = $oParams->getString('class', false);
 
@@ -21,13 +21,22 @@ $aPolygons = array();
 while ($iTotalBroken && !sizeof($aPolygons)) {
     $sSQL = 'select osm_type as "type",osm_id as "id",class as "key",type as "value",name->\'name\' as "name",';
     $sSQL .= 'country_code as "country",errormessage as "error message",updated';
-    $sSQL .= " from import_polygon_error";
-    $sSQL .= " where updated > 'now'::timestamp - '".$iDays." day'::interval";
-    $iDays++;
+    $sSQL .= ' from import_polygon_error';
 
-    if ($bReduced) $sSQL .= " and errormessage like 'Area reduced%'";
-    if ($sClass) $sSQL .= " and class = '".pg_escape_string($sClass)."'";
-    $sSQL .= " order by updated desc limit 1000";
+    $aWhere = array();
+    if ($iDays) {
+        $aWhere[] = "updated > 'now'::timestamp - '".$iDays." day'::interval";
+        $iDays++;
+    }
+
+    if ($bReduced) $aWhere[] = "errormessage like 'Area reduced%'";
+    if ($sClass) $sWhere[] = "class = '".pg_escape_string($sClass)."'";
+
+    if (sizeof($aWhere)) {
+        $sSQL .= ' where '.join(' and ', $aWhere);
+    }
+
+    $sSQL .= ' order by updated desc limit 1000';
     $aPolygons = chksql($oDB->getAll($sSQL));
 }
 
@@ -86,48 +95,42 @@ table td {
 
 echo "<p>Total number of broken polygons: $iTotalBroken</p>";
 if (!$aPolygons) exit;
-echo "<table>";
-echo "<tr>";
+echo '<table>';
+echo '<tr>';
 //var_dump($aPolygons[0]);
 foreach ($aPolygons[0] as $sCol => $sVal) {
-    echo "<th>".$sCol."</th>";
+    echo '<th>'.$sCol.'</th>';
 }
-echo "<th>&nbsp;</th>";
-echo "<th>&nbsp;</th>";
-echo "</tr>";
+echo '<th>&nbsp;</th>';
+echo '</tr>';
 $aSeen = array();
 foreach ($aPolygons as $aRow) {
     if (isset($aSeen[$aRow['type'].$aRow['id']])) continue;
     $aSeen[$aRow['type'].$aRow['id']] = 1;
-    echo "<tr>";
+    echo '<tr>';
     foreach ($aRow as $sCol => $sVal) {
         switch ($sCol) {
             case 'error message':
                 if (preg_match('/Self-intersection\\[([0-9.\\-]+) ([0-9.\\-]+)\\]/', $sVal, $aMatch)) {
                     $aRow['lat'] = $aMatch[2];
                     $aRow['lon'] = $aMatch[1];
-                    echo "<td><a href=\"http://www.openstreetmap.org/?lat=".$aMatch[2]."&lon=".$aMatch[1]."&zoom=18&layers=M&".$sOSMType."=".$aRow['id']."\">".($sVal?$sVal:'&nbsp;')."</a></td>";
+                    echo '<td><a href="https://www.openstreetmap.org/?lat='.$aMatch[2].'&lon='.$aMatch[1].'&zoom=18&layers=M&'.$sOSMType.'='.$aRow['id'].'">'.($sVal?$sVal:'&nbsp;').'</a></td>';
                 } else {
-                    echo "<td>".($sVal?$sVal:'&nbsp;')."</td>";
+                    echo '<td>'.($sVal?$sVal:'&nbsp;').'</td>';
                 }
                 break;
             case 'id':
                 echo '<td>'.osmLink($aRow).'</td>';
                 break;
             default:
-                echo "<td>".($sVal?$sVal:'&nbsp;')."</td>";
+                echo '<td>'.($sVal?$sVal:'&nbsp;').'</td>';
                 break;
         }
     }
-    echo "<td><a href=\"http://localhost:8111/import?url=http://www.openstreetmap.org/api/0.6/".$sOSMType.'/'.$aRow['id']."/full\" target=\"josm\">josm</a></td>";
-    if (isset($aRow['lat'])) {
-        echo "<td><a href=\"http://open.mapquestapi.com/dataedit/index_flash.html?lat=".$aRow['lat']."&lon=".$aRow['lon']."&zoom=18\" target=\"potlatch2\">P2</a></td>";
-    } else {
-        echo "<td>&nbsp;</td>";
-    }
-    echo "</tr>";
+    echo '<td><a href="http://localhost:8111/import?url=https://www.openstreetmap.org/api/0.6/'.$sOSMType.'/'.$aRow['id'].'/full" target="josm">josm</a></td>';
+    echo '</tr>';
 }
-echo "</table>";
+echo '</table>';
 
 ?>
 </body>

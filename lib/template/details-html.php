@@ -68,7 +68,8 @@
         echo '  <td class="name">'.(trim($aAddressLine['localname'])?$aAddressLine['localname']:'<span class="noname">No Name</span>')."</td>\n";
         echo '  <td>' . $aAddressLine['class'].':'.$aAddressLine['type'] . "</td>\n";
         echo '  <td>' . osmLink($aAddressLine) . "</td>\n";
-        echo '  <td>' . (isset($aAddressLine['admin_level']) ? $aAddressLine['admin_level'] : '') . "</td>\n";
+        echo '  <td>' . (isset($aAddressLine['rank_address']) ? $aAddressLine['rank_address'] : '') . "</td>\n";
+        echo '  <td>' . ($aAddressLine['admin_level'] < 15 ? $aAddressLine['admin_level'] : '') . "</td>\n";
         echo '  <td>' . format_distance($aAddressLine['distance'])."</td>\n";
         echo '  <td>' . detailsLink($aAddressLine,'details &gt;') . "</td>\n";
         echo "</tr>\n";
@@ -124,6 +125,8 @@
                         kv('Wikipedia Calculated' , wikipediaLink($aPointDetails) );
                     }
 
+                    kv('Computed Postcode', $aPointDetails['postcode']);
+                    kv('Address Tags'    , hash_to_subtable($aPointDetails['aAddressTags']) );
                     kv('Extra Tags'      , hash_to_subtable($aPointDetails['aExtraTags']) );
 
                 ?>
@@ -147,6 +150,7 @@
                       <td>Local name</td>
                       <td>Type</td>
                       <td>OSM</td>
+                      <td>Address rank</td>
                       <td>Admin level</td>
                       <td>Distance</td>
                       <td></td>
@@ -241,7 +245,7 @@
         echo 'var nominatim_map_init = ' . json_encode($aNominatimMapInit, JSON_PRETTY_PRINT) . ';';
 
         $aPlace = array(
-                'outlinestring' => $aPointDetails['outlinestring'],
+                'asgeojson' => $aPointDetails['asgeojson'],
                 'lon' => $aPointDetails['lon'],
                 'lat' => $aPointDetails['lat'],
         );

@@ -17,7 +17,7 @@ is.
 
 3. Nominatim 
 
-        git clone --recursive https://github.com/twain47/Nominatim.git
+        git clone --recursive https://github.com/openstreetmap/Nominatim.git
 
     If you haven't used `--recursive`, then you can load the submodules using
     
@@ -43,17 +43,17 @@ is.
     
     See the FAQ how to skip this step and point Nominatim to an existing database.
 
-  ```
-  # inside the virtual machine:
-  mkdir data
-  cd build
-    wget --no-verbose --output-document=../data/monaco.osm.pbf http://download.geofabrik.de/europe/monaco-latest.osm.pbf
-    ./utils/setup.php --osm-file ../data/monaco.osm.pbf --osm2pgsql-cache 1000 --all 2>&1 | tee monaco.$$.log
-    ```
+      ```
+      # inside the virtual machine:
+      mkdir data
+      cd build
+      wget --no-verbose --output-document=../data/monaco.osm.pbf http://download.geofabrik.de/europe/monaco-latest.osm.pbf
+      ./utils/setup.php --osm-file ../data/monaco.osm.pbf --osm2pgsql-cache 1000 --all 2>&1 | tee monaco.$$.log
+      ```
 
-  To repeat an import you'd need to delete the database first
+    To repeat an import you'd need to delete the database first
 
-        dropdb -if-exists nominatim
+        dropdb --if-exists nominatim
 
 
 
@@ -102,7 +102,7 @@ and then
 
 ## Running unit tests
 
-    cd ~/Nominatim/tests-php
+    cd ~/Nominatim/tests/php
     phpunit ./
 
 
@@ -128,7 +128,7 @@ No. Long running Nominatim installations will differ once new import features (o
 bug fixes) get added since those usually only get applied to new/changed data.
 
 Also this document skips the optional Wikipedia data import which affects ranking
-of search results. See [Nominatim installation](http://wiki.openstreetmap.org/wiki/Nominatim/Installation) for details.
+of search results. See [Nominatim installation](http://nominatim.org/release-docs/latest/Installation) for details.
 
 ##### Why Ubuntu and CentOS, can I test CentOS/CoreOS/FreeBSD?
 

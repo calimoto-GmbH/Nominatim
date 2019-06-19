@@ -18,10 +18,11 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
 project(nominatim)
 
-set(NOMINATIM_VERSION_MAJOR 2)
-set(NOMINATIM_VERSION_MINOR 5)
+set(NOMINATIM_VERSION_MAJOR 3)
+set(NOMINATIM_VERSION_MINOR 1)
+set(NOMINATIM_VERSION_PATCH 0)
 
-set(NOMINATIM_VERSION "${NOMINATIM_VERSION_MAJOR}.${NOMINATIM_VERSION_MINOR}")
+set(NOMINATIM_VERSION "${NOMINATIM_VERSION_MAJOR}.${NOMINATIM_VERSION_MINOR}.${NOMINATIM_VERSION_PATCH}")
 
 add_definitions(-DNOMINATIM_VERSION="${NOMINATIM_VERSION}")
 
@@ -34,6 +35,12 @@ add_definitions(-DNOMINATIM_VERSION="${NOMINATIM_VERSION}")
 
 set(BUILD_TESTS off CACHE BOOL "Build test suite" FORCE)
 set(WITH_LUA off CACHE BOOL "Build with lua support" FORCE)
+
+if (NOT EXISTS "${CMAKE_SOURCE_DIR}/osm2pgsql/CMakeLists.txt")
+    message(FATAL_ERROR "The osm2pgsql directory is empty.\
+    Did you forget to check out Nominatim recursively?\
+    \nTry updating submodules with: git submodule update --init")
+endif()
 add_subdirectory(osm2pgsql)
 
 find_package(Threads REQUIRED)
@@ -42,6 +49,17 @@ unset(PostgreSQL_TYPE_INCLUDE_DIR CACHE)
 set(PostgreSQL_TYPE_INCLUDE_DIR "/usr/include/")
 find_package(PostgreSQL REQUIRED)
 include_directories(${PostgreSQL_INCLUDE_DIRS})
+link_directories(${PostgreSQL_LIBRARY_DIRS})
+
+find_program(PYOSMIUM pyosmium-get-changes)
+if (NOT EXISTS "${PYOSMIUM}")
+    set(PYOSMIUM_PATH "/nonexistent")
+        message(WARNING "pyosmium-get-changes not found (required for updates)")
+else()
+    set(PYOSMIUM_PATH "${PYOSMIUM}")
+    message(STATUS "Using pyosmium-get-changes at ${PYOSMIUM_PATH}")
+endif()
+
 
 find_program(PG_CONFIG pg_config)
 execute_process(COMMAND ${PG_CONFIG} --pgxs

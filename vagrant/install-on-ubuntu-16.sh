@@ -8,7 +8,7 @@ export DEBIAN_FRONTEND=noninteractive #DOCS:
 
 #
 # *Note:* these installation instructions are also available in executable
-#         form for use with vagrant under vagrant/install-on-ubuntu-16.sh.
+#         form for use with vagrant under vagrant/Install-on-Ubuntu-16.sh.
 #
 # Installing the Required Software
 # ================================
@@ -18,6 +18,7 @@ export DEBIAN_FRONTEND=noninteractive #DOCS:
 # Make sure all packages are are up-to-date by running:
 #
 
+#DOCS:    :::sh
     sudo apt-get -o DPkg::options::="--force-confdef" -o DPkg::options::="--force-confold" --force-yes -fuy install grub-pc #DOCS:
     sudo apt-get update -qq
 
@@ -25,17 +26,19 @@ export DEBIAN_FRONTEND=noninteractive #DOCS:
 
     sudo apt-get install -y build-essential cmake g++ libboost-dev libboost-system-dev \
                             libboost-filesystem-dev libexpat1-dev zlib1g-dev libxml2-dev\
-                            libbz2-dev libpq-dev libgeos-dev libgeos++-dev libproj-dev \
-                            postgresql-server-dev-9.5 postgresql-9.5-postgis-2.2 postgresql-contrib-9.5 \
+                            libbz2-dev libpq-dev libproj-dev \
+                            postgresql-server-dev-9.5 postgresql-9.5-postgis-2.2 \
+                            postgresql-contrib-9.5 \
                             apache2 php php-pgsql libapache2-mod-php php-pear php-db \
-                            git
+                            php-intl git
 
 # If you want to run the test suite, you need to install the following
 # additional packages:
 
-    sudo apt-get install -y python3-dev python3-pip python3-psycopg2 python3-tidylib phpunit
+    sudo apt-get install -y python3-setuptools python3-dev python3-pip \
+                            python3-psycopg2 python3-tidylib phpunit php-cgi
 
-    pip3 install --user behave nose # urllib3
+    pip3 install --user behave nose
     sudo pear install PHP_CodeSniffer
 
 #
@@ -75,7 +78,8 @@ export DEBIAN_FRONTEND=noninteractive #DOCS:
 #
 # Tune the postgresql configuration, which is located in 
 # `/etc/postgresql/9.5/main/postgresql.conf`. See section *Postgres Tuning* in
-# [the installation page](Installation.md) for the parameters to change.
+# [the installation page](../admin/Installation.md#postgresql-tuning)
+# for the parameters to change.
 #
 # Restart the postgresql service after updating this config file.
 
@@ -97,7 +101,7 @@ export DEBIAN_FRONTEND=noninteractive #DOCS:
 # You need to create an alias to the website directory in your apache
 # configuration. Add a separate nominatim configuration to your webserver:
 
-#DOCS:```
+#DOCS:```sh
 sudo tee /etc/apache2/conf-available/nominatim.conf << EOFAPACHECONF
 <Directory "$USERHOME/build/website"> #DOCS:<Directory "$USERHOME/Nominatim/build/website">
   Options FollowSymLinks MultiViews
@@ -128,19 +132,25 @@ sudo sed -i 's:#.*::' /etc/apache2/conf-available/nominatim.conf #DOCS:
 #
 # Get the source code from Github and change into the source directory
 #
-if [ "x$1" == "xyes" ]; then  #DOCS:
-
+if [ "x$1" == "xyes" ]; then  #DOCS:    :::sh
     cd $USERHOME
-    git clone --recursive git://github.com/twain47/Nominatim.git
-#DOCS:    cd Nominatim
-
+    git clone --recursive git://github.com/openstreetmap/Nominatim.git
+    cd Nominatim
 else                               #DOCS:
-    cd $USERHOME                   #DOCS:
+    cd $USERHOME/Nominatim         #DOCS:
+fi                                 #DOCS:
+
+# When installing the latest source from github, you also need to
+# download the country grid:
+
+if [ ! -f data/country_osm_grid.sql.gz ]; then       #DOCS:    :::sh
+    wget -O data/country_osm_grid.sql.gz https://www.nominatim.org/data/country_grid.sql.gz
 fi                                 #DOCS:
 
 # The code must be built in a separate directory. Create this directory,
 # then configure and build Nominatim in there:
 
+    cd $USERHOME                   #DOCS:    :::sh
     mkdir build
     cd build
     cmake $USERHOME/Nominatim
@@ -149,7 +159,7 @@ fi                                 #DOCS:
 # You need to create a minimal configuration file that tells nominatim
 # where it is located on the webserver:
 
-#DOCS:```
+#DOCS:```sh
 tee settings/local.php << EOF
 <?php
  @define('CONST_Website_BaseURL', '/nominatim/');
@@ -158,4 +168,4 @@ EOF
 
 
 # Nominatim is now ready to use. Continue with
-# [importing a database from OSM data](Import_and_update.md).
+# [importing a database from OSM data](../admin/Import-and-Update.md).

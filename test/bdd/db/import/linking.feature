@@ -40,11 +40,11 @@ Feature: Linking of places
     Scenario: Relations are not linked when in waterway relations
         Given the scene split-road
         And the places
-         | osm | class    | type  | name  | geometry |
-         | W1  | waterway | river | Rhein | :w-2 |
-         | W2  | waterway | river | Rhein | :w-3 |
-         | R1  | waterway | river | Rhein | :w-1 + :w-2 + :w-3 |
-         | R2  | waterway | river | Limmat| :w-4a |
+         | osm | class    | type   | name  | geometry |
+         | W1  | waterway | stream | Rhein | :w-2 |
+         | W2  | waterway | river  | Rhein | :w-3 |
+         | R1  | waterway | river  | Rhein | :w-1 + :w-2 + :w-3 |
+         | R2  | waterway | river  | Limmat| :w-4a |
         And the relations
          | id | members                          | tags+type |
          | 1  | R2                               | waterway  |
@@ -69,11 +69,11 @@ Feature: Linking of places
          | object | linked_place_id |
          | R1     | - |
 
-    Scenario: Waterways are not linked when waterway types don't match
+    Scenario: Waterways are not linked when the way type is not a river feature
         Given the scene split-road
         And the places
          | osm | class    | type     | name  | geometry |
-         | W1  | waterway | drain    | Rhein | :w-2 |
+         | W1  | waterway | lock     | Rhein | :w-2 |
          | R1  | waterway | river    | Rhein | :w-1 + :w-2 + :w-3 |
         And the relations
          | id | members               | tags+type |
@@ -108,3 +108,22 @@ Feature: Linking of places
         Then results contain
          | osm_type |
          | W |
+
+    # github #573
+    Scenario: Boundaries should only be linked to places
+        Given the named places
+         | osm | class    | type           | extra+wikidata | admin | geometry |
+         | R1  | boundary | administrative | 34             | 8     | poly-area:0.1 |
+        And the named places
+         | osm | class    | type           | geometry |
+         | N3  | natural  | island         | 0.00001 0 |
+         | N3  | place    | city           | 0.00001 0 |
+        And the relations
+         | id | members  |
+         | 1  | N3:label |
+        When importing
+        Then placex contains
+         | object     | linked_place_id |
+         | N3:natural | -               |
+         | N3:place   | R1              |
+

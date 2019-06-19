@@ -218,7 +218,7 @@ struct index_thread_data * thread_data, const char *structuredoutputfile)
                     usleep(1000);
 
                     // Aim for one update per second
-                    if (sleepcount++ > 500)
+                    if (sleepcount++ > 1000)
                     {
                         rankPerSecond = ((float)rankCountTuples + (float)count) / MAX(difftime(time(0), rankStartTime),1);
                         if(interpolation)
@@ -438,9 +438,9 @@ void *nominatim_indexThread(void * thread_data_in)
     uint64_t    paramPlaceID;
     uint64_t    place_id;
     time_t      updateStartTime;
-    uint        table;
+    unsigned    table;
     
-    table = (uint)(thread_data->table);
+    table = thread_data->table;
 
     while (1)
     {
